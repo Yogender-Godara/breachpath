@@ -1,0 +1,4 @@
+# Keep LF line endings so scripts and Docker builds behave the same on Windows and WSL
+* text=auto eol=lf
+*.png binary
+*.jpg binary

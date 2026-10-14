@@ -1,0 +1,28 @@
+[project]
+name = "breachpath"
+version = "0.1.0"
+description = "Attack-path agent on FalkorDB: finds every path from a compromised identity to crown jewels, computes the smallest safe fix, applies it to a sandbox and proves it."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "falkordb",
+    "redis",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "openai",
+    "mcp",
+    "networkx",
+    "pyyaml",
+    "streamlit",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
