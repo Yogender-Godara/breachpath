@@ -42,7 +42,7 @@
 - [x] Requirements, HLD, LLD, flow diagrams, risks, prompts (`docs/`)
 - [x] Two review rounds applied (05 decisions Q12, Q13)
 
-### P0.2 Your machine and accounts ⬜ 👤
+### P0.2 Your machine and accounts 🟨 👤
 - [ ] Groq, OpenRouter and Mistral API keys ready (password manager, never in the repo)
 - [ ] Docker Desktop running (WSL2 backend), about 8 GB RAM free for Docker
 - [ ] Python 3.12, git, VS Code + a Mermaid preview extension installed
@@ -59,7 +59,7 @@
 
 ## P1: Kickoff checks (Day 1, first 2 hours)
 
-### P1.1 Repo skeleton ⬜ 🤖 + 👤
+### P1.1 Repo skeleton ✅ 🤖 + 👤
 - [x] 👤 Create the public GitHub repo `breachpath` and clone it locally
 - [x] Folder skeleton per [LLD §1](docs/03_LLD.md) (`core/`, `mcp_server/`, `agents/`, `orchestrator/`, `api/`, `worker/`, `ui/`, `data/`, `eval/`, `tests/`)
 - [x] `.gitignore` (`.env`, `__pycache__`, `.venv`, data outputs) + `.gitattributes` (LF endings)
@@ -71,7 +71,7 @@
 
 **Done when:** the repo is public and the skeleton is pushed.
 
-### P1.2 FalkorDB up ⬜ 🤖
+### P1.2 FalkorDB up 🟨 🤖
 - [x] `docker-compose.yml` with the `falkordb` service only (volume, `requirepass`, `expose`)
 - [x] `docker-compose.dev.yml`: `127.0.0.1:6379` + browser `127.0.0.1:3000` (local only)
 - [ ] `docker compose up` → `PING` works and the FalkorDB browser opens
@@ -79,7 +79,7 @@
 
 **Done when:** FalkorDB answers from Python on localhost.
 
-### P1.3 FalkorDB feature checks (B1–B7) ⬜ 🤖
+### P1.3 FalkorDB feature checks (B1–B7) ✅ 🤖
 Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to `docs/VERIFY_RESULTS.md`.
 - [x] **B1** `algo.maxFlow` exists and returns the known max flow on a 4-node graph
 - [x] **B2a** `edges` from maxFlow carry properties (`e.eid` works)
@@ -104,7 +104,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** at least one provider passes all 3 calls, and the models are chosen.
 
-### P1.5 MCP stdio and Streamlit checks (B9) ⬜ 🤖
+### P1.5 MCP stdio and Streamlit checks (B9) ✅ 🤖
 - [x] Hello-world MCP server (`MCPServer`) over stdio: the client starts the subprocess, lists tools, calls one (inside the worker container)
 - [x] Streamlit version supports `st.fragment(run_every=…)`
 
@@ -118,14 +118,14 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P2: Data and graph (Day 1)
 
-### P2.1 Schema and client ⬜ 🤖
+### P2.1 Schema and client ✅ 🤖
 - [x] `core/graph/schema.py`: labels, edge types, `ATTACK_TYPES`, remediation verb per type ([LLD §2.3](docs/03_LLD.md))
 - [x] `core/graph/client.py`: connection from env, `ro_query` / `query`, per-query timeout, graph-name helpers
 - [x] Index creation function ([LLD §2.5](docs/03_LLD.md))
 
 **Done when:** you can connect and create indexes on an empty graph.
 
-### P2.2 Background company generator ⬜ 🤖
+### P2.2 Background company generator ✅ 🤖
 - [x] `data/generator.py` skeleton, `SEED=42`
 - [x] Nodes per [LLD §10.2](docs/03_LLD.md): 6 teams, 50 users (40 humans + 10 service accounts), 12 groups, 15 roles, 25 policies, 10 servers, 10 DBs, 6 secrets
 - [x] Noise-edge rules (membership, assume, policy, read, SSH, secrets), each with an `eid`
@@ -134,7 +134,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** the same seed always gives the same file.
 
-### P2.3 Scenario files S1–S3 ⬜ 🤖
+### P2.3 Scenario files S1–S3 ✅ 🤖
 - [x] YAML schema per [LLD §10.3](docs/03_LLD.md) + parser with validation
 - [x] `s1.yaml` simple chain
 - [x] `s2.yaml` problem-statement example (escalation + saved password; needs: staging, build)

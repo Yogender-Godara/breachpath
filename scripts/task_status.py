@@ -30,6 +30,22 @@ def status(done, total):
         return "🟨"
     return "⬜"
 
+# Per-task status icon on "### Px.y ..." headings, from the checkboxes under each heading.
+lines = text.splitlines()
+for i, line in enumerate(lines):
+    if not re.match(r"^### P\d+\.\d+", line) or not re.search("[⬜🟨✅]", line):
+        continue
+    done = total = 0
+    for nxt in lines[i + 1:]:
+        if nxt.startswith("#"):
+            break
+        if re.match(r"^\s*- \[( |x)\]", nxt):
+            total += 1
+            done += nxt.lstrip().startswith("- [x]")
+    if total:
+        lines[i] = re.sub("[⬜🟨✅]", status(done, total), line, count=1)
+text = "\n".join(lines)
+
 out = []
 tot_d = tot_t = 0
 for line in text.splitlines():
