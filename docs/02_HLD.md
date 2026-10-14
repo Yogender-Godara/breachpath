@@ -83,9 +83,9 @@ flowchart LR
 | C1 | **UI** | Start an incident, show live agent timeline, path graph, fix, proof, eval table | Streamlit + graph view component | none |
 | C2 | **API service** | REST endpoints, validation, idempotency, enqueue jobs, serve state and events, fast mode | FastAPI + Uvicorn | none |
 | C3 | **Worker service** | Runs `run_incident(agent)`: Orchestrator state machine, the 3 LLM agents and the 2 code workers, checkpoints after each step. Starts the MCP server as a stdio subprocess. | Python, `openai` SDK (OpenAI-compatible providers), MCP client (stdio) | none (checkpoint in Redis) |
-| C4 | **MCP server** | Thin MCP wrapper over `core` tools. **No container, no port.** Started by the worker over stdio, or by an external MCP client on a laptop. | Python MCP SDK (FastMCP, stdio transport) **[VERIFY]** | none |
+| C4 | **MCP server** | Thin MCP wrapper over `core` tools. **No container, no port.** Started by the worker over stdio, or by an external MCP client on a laptop. | Python MCP SDK 2.x (`MCPServer`, stdio transport) (verified P1.5: `mcp.server.mcpserver.MCPServer`, stdio) | none |
 | C4b | **`core` library** | Graph tools (paths, min-cut, simulate, sandbox, verify), guards, timeouts, and the single `run_incident(mode)` pipeline | Python package imported by API, worker and MCP | none |
-| C5 | **FalkorDB** | Baseline graph, sandbox graphs, algorithms, job stream, incident state, events | `falkordb/falkordb` Docker image **[VERIFY version has `algo.maxFlow`]** | **all state** |
+| C5 | **FalkorDB** | Baseline graph, sandbox graphs, algorithms, job stream, incident state, events | `falkordb/falkordb` Docker image (verified: FalkorDB 6.0.2 has `algo.maxFlow`, see `docs/VERIFY_RESULTS.md`) | **all state** |
 | C6 | **Data generator and loader** | Build the synthetic company, plant scenarios, write answer keys, bulk load | Python script (seeded) | files |
 | C7 | **Eval harness** | Score scenarios, run the JSON-dump baseline, brute-force the optimum | Python script | files |
 
@@ -187,7 +187,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | DB client | `falkordb` Python client | Official |
 | Queue / state | **Redis Streams + hashes in the same FalkorDB instance** | No extra service |
 | API | FastAPI + Uvicorn | Async, fast, auto docs at `/docs` |
-| MCP | Official MCP Python SDK (FastMCP), **stdio** transport | Standard. No port to secure. The same server works for external MCP clients on a laptop. |
+| MCP | Official MCP Python SDK 2.x (`mcp.server.mcpserver.MCPServer`; FastMCP no longer exists in 2.x), **stdio** transport | Standard. No port to secure. The same server works for external MCP clients on a laptop. |
 | LLM | `openai` Python SDK against OpenAI-compatible endpoints (Groq, OpenRouter, Mistral) + our `LLMGateway` (fallback chain, cache) | One code path for all providers. Easy to explain. *Alternative if a provider has quirks: LiteLLM.* |
 | UI | Streamlit + a graph component (e.g. `streamlit-agraph` or `pyvis`) **[VERIFY pick on Day 3]** | Fastest way to build a usable UI in Python |
 | Packaging | Docker Compose | One-command run |
@@ -199,7 +199,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 
 | Where | Technique |
 |---|---|
-| Graph lookups | Index on `id` for every label, and on edge `eid` **[VERIFY relationship index support]** |
+| Graph lookups | Index on `id` for every label, and on edge `eid` (relationship indexes verified; they build asynchronously) |
 | Graph queries | **Parameterized** queries, so FalkorDB can reuse cached query plans |
 | Path search | **Bounded** hops (`*1..6`) + `LIMIT k` for display. The **decision** uses `maxFlow`, which needs no path enumeration. |
 | Read queries | `GRAPH.RO_QUERY`, which can be sent to a replica when scaling |

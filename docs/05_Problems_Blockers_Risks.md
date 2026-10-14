@@ -136,4 +136,4 @@ For **every task**:
 - [ ] LLM smoke test on Groq, OpenRouter and Mistral (B8). Record the chosen model ids and their rate limits.
 - [ ] MCP hello-world tool listed from another container (B9)
 - [ ] Create the repo, first commit, README skeleton with **AI usage disclosure**
-- [ ] Update these docs with the test results (remove each **[VERIFY]** tag once tested)
+- [x] Update these docs with the test results (B1–B7 done in P1.3; remaining tags are for the LLM, MCP, Streamlit and deploy checks)

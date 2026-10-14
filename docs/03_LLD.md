@@ -32,7 +32,7 @@ breachpath/
 │   │   └── guards.py           # sandbox-name guard, lock owner, quota, eid validation
 │   └── pipeline.py             # run_incident(mode): the ONE orchestration pipeline (fast + agent)
 ├── mcp_server/
-│   └── server.py               # thin FastMCP wrapper over core.tools, stdio transport only
+│   └── server.py               # thin MCPServer (mcp 2.x) wrapper over core.tools, stdio transport only
 ├── agents/
 │   ├── base.py                 # LLM tool-use loop (MCP client → OpenAI-format tools)
 │   ├── llm_gateway.py          # provider chain (Groq/OpenRouter/Mistral), retries, response cache
@@ -152,7 +152,7 @@ flowchart LR
     BN["BusinessNeed<br/>(no edges)"]
 ```
 
-### 2.5 Indexes **[VERIFY relationship index syntax]**
+### 2.5 Indexes (verified P1.3: relationship indexes work and build **asynchronously**, starting as `UNDER CONSTRUCTION`)
 
 ```cypher
 CREATE INDEX FOR (n:Asset) ON (n.id)
@@ -171,6 +171,8 @@ CREATE INDEX FOR ()-[r:CAN_ASSUME]-() ON (r.eid)
 All queries are **parameterized**. `$types` = `ATTACK_TYPES`. `{T}` below means the literal type list `MEMBER_OF|CAN_ASSUME|…` (types can't be parameters inside a pattern, so they're written into the query string from a constant, never from user input).
 
 ### Q0: Load (per label and per edge type, in batches)
+
+> P1.3 finding: a whole map parameter can't be used as inline properties (`CREATE ()-[:R $p]->()` fails with *"Encountered unhandled type in inlined properties"*). Use explicit fields (`{eid: row.eid, …}`) or `SET r += row.props`.
 
 ```cypher
 // nodes (one query per label)
@@ -205,7 +207,7 @@ ORDER BY hops ASC
 LIMIT $k
 ```
 
-### Q3: Shortest paths per target (`algo.SPpaths`) **[VERIFY `relDirection` value and `maxLen`]**
+### Q3: Shortest paths per target (`algo.SPpaths`) (verified P1.3: `relDirection:'outgoing'`, `weightProp`, `pathCount`, `maxLen` accepted; **no path → no rows**)
 
 ```cypher
 MATCH (s:Asset {id: $src}), (t:Asset {id: $target})
@@ -238,7 +240,7 @@ LIMIT $top
 ```
 > `samplingSize` defaults to 32, which makes the result **approximate**. Set `$n` to at least the node count (about 150) to get near-exact results on small graphs. Betweenness is **global**, so it's only a hint. The decision comes from Q6.
 
-### Q6: Max flow (input to the min-cut) **[VERIFY `CALL` after `WITH`; behavior when the flow is 0]**
+### Q6: Max flow (input to the min-cut) (verified P1.3: `CALL` after `WITH collect()` works; multi-target works; respects direction; **zero flow → one row with `maxFlow = 0.0`**; values are **floats**; `edges` carry properties and line up with `edgeFlows`)
 
 ```cypher
 MATCH (s:Asset {id: $src})
@@ -308,7 +310,7 @@ CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: $types,
 YIELD path
 RETURN n.id AS need_id, count(path) > 0 AS ok
 ```
-> **[VERIFY]** whether `SPpaths` returns no row when there's no path. If so, compute `ok` in Python from the set of need ids returned.
+> Verified P1.3: `SPpaths` returns **no row** when there's no path. So compute `ok` in Python: every valid need id that is missing from the result = not ok.
 
 ### Q12: Reach sets of all principals (for collateral)
 
@@ -440,6 +442,7 @@ OUTPUT: {suggestion_type: "rotate_credentials"|"split_node"|"manual", split_node
 
 **Exposure (decisions D12, D19):** the MCP server has **no network listener**. It speaks **stdio only**:
 - **Inside the worker container:** the worker starts `python -m mcp_server.server` as a subprocess and talks to it over stdin/stdout. Each worker process has its own subprocess.
+- **Verified P1.5:** the stdio subprocess does **not** inherit the parent's environment. The worker must pass `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_PASSWORD` (+ graph settings such as `MAX_HOPS`) explicitly via `StdioServerParameters(env=…)`. API: server `mcp.server.mcpserver.MCPServer` + `@mcp.tool()` + `mcp.run(transport="stdio")`; client `from mcp import ClientSession, StdioServerParameters, stdio_client`.
 - **Fast mode** doesn't use MCP. The API calls `core.tools` directly through `core.pipeline.run_incident(mode="fast")`.
 - **Local stdio demo** (an MCP client on your laptop, e.g. Claude Desktop/Code): the MCP server runs as a **host process over stdio**. To reach FalkorDB it needs a port, so the **local-only** override file `docker-compose.dev.yml` publishes FalkorDB on `127.0.0.1:6379` (loopback only, not reachable from the network). **The deployed compose file never publishes it.**
 - `MCP_PROFILE=full` (default) registers all tools. `MCP_PROFILE=readonly` registers **read tools only, without `run_readonly_cypher`**. Use it for the external-client demo if you want to be extra safe.
@@ -644,7 +647,7 @@ The heartbeat is cancelled in `finally`, and the lock is deleted only if it's st
 
 Each scenario graph = **the same background company** (same seed) **+ one planted scenario**. Ground truth is computed **on the final graph** by an independent reference implementation, never from what we meant to plant.
 
-### 10.2 Background company (seed 42, about 130 nodes, about 300 edges)
+### 10.2 Background company (seed 42: 128 nodes, 165 edges, about 37% recent; verified P2.2)
 
 | Type | Count | Rules |
 |---|---|---|
@@ -661,6 +664,7 @@ Each scenario graph = **the same background company** (same seed) **+ one plante
 **Noise edge rules:**
 - Each human is `MEMBER_OF` 1–2 groups of their team.
 - Each group can assume (`CAN_ASSUME`) 1–2 roles.
+- Each service user can assume 1 role of its own team (gap fill in P2.2, so service users aren't dead ends).
 - Each role has 1–3 policies (`HAS_POLICY`).
 - Each policy can read (`CAN_READ`) 1–2 non-crown databases, and has a 20% chance of `CAN_SSH` to one server.
 - Each server has a 30% chance of storing a secret (`STORES_SECRET`), which `AUTHENTICATES_AS` a service user.
@@ -850,7 +854,7 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 |---|---|
 | Sub-graph drawn | Union of: listed attack paths (≤ 20) + protected business paths + cut edges + 1 hop around cut edges. Hard cap 150 elements. Shows "+N more" if trimmed. |
 | Graph component | `streamlit-agraph` (vis.js) **[VERIFY on Day 3]**. Fallback: graphviz static image + a path table. |
-| Live updates | Use **`st.fragment(run_every=1s)`** for the **timeline only** **[VERIFY Streamlit version]**. Each run fetches `GET /incidents/{id}/events?after=<last_id>` (short poll, no blocking inside Streamlit) and appends new rows from `st.session_state`. The rest of the page does **not** rerun. |
+| Live updates | Use **`st.fragment(run_every=1s)`** for the **timeline only** (verified P1.5: Streamlit 1.66.0). Each run fetches `GET /incidents/{id}/events?after=<last_id>` (short poll, no blocking inside Streamlit) and appends new rows from `st.session_state`. The rest of the page does **not** rerun. |
 | Graph redraw | The graph is redrawn **only when the incident phase changes** (INVESTIGATING → PLANNING → VERIFYING → DONE). A cached figure keyed by `(incident_id, phase)` lives in `st.session_state`, so zoom and pan aren't lost on every tool call. |
 | Fast mode | One call to `/analyze`. Draws immediately. |
 | Agent mode | Needs a demo token (env `DEMO_TOKEN`). Without it, the Agent radio is disabled with a hint. |

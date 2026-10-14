@@ -1,0 +1,34 @@
+id: s3
+title: "Shared choke point: four paths through one stale role assumption"
+src: user:mia
+nodes:
+  - {id: user:mia, label: User, name: mia, user_type: human, team: data}
+  - {id: group:s3-contractors, label: Group, name: s3-contractors}
+  - {id: role:s3-legacy-admin, label: Role, name: s3-legacy-admin, env: prod}
+  - {id: policy:s3-hr-1, label: Policy, name: s3-hr-1, actions: ["db:Read"]}
+  - {id: policy:s3-hr-2, label: Policy, name: s3-hr-2, actions: ["db:Read"]}
+  - {id: policy:s3-hr-3, label: Policy, name: s3-hr-3, actions: ["db:Read"]}
+  - {id: policy:s3-hr-4, label: Policy, name: s3-hr-4, actions: ["db:Read"]}
+  - {id: db:s3-hr, label: Database, name: s3-hr, env: prod, crown_jewel: true, sensitivity: high}
+  - {id: role:s3-wiki, label: Role, name: s3-wiki, env: prod}
+  - {id: policy:s3-wiki, label: Policy, name: s3-wiki, actions: ["db:Read"]}
+  - {id: db:s3-wiki, label: Database, name: s3-wiki, env: prod, crown_jewel: false, sensitivity: low}
+edges:
+  - {eid: "e:s3:01", type: MEMBER_OF, src: user:mia, dst: group:s3-contractors, last_used_days: 4}
+  - {eid: "e:s3:02", type: CAN_ASSUME, src: group:s3-contractors, dst: role:s3-legacy-admin, last_used_days: 330}
+  - {eid: "e:s3:03", type: HAS_POLICY, src: role:s3-legacy-admin, dst: policy:s3-hr-1, last_used_days: 340}
+  - {eid: "e:s3:04", type: HAS_POLICY, src: role:s3-legacy-admin, dst: policy:s3-hr-2, last_used_days: 350}
+  - {eid: "e:s3:05", type: HAS_POLICY, src: role:s3-legacy-admin, dst: policy:s3-hr-3, last_used_days: 360}
+  - {eid: "e:s3:06", type: HAS_POLICY, src: role:s3-legacy-admin, dst: policy:s3-hr-4, last_used_days: 370}
+  - {eid: "e:s3:07", type: CAN_READ, src: policy:s3-hr-1, dst: db:s3-hr, last_used_days: 60}
+  - {eid: "e:s3:08", type: CAN_READ, src: policy:s3-hr-2, dst: db:s3-hr, last_used_days: 70}
+  - {eid: "e:s3:09", type: CAN_READ, src: policy:s3-hr-3, dst: db:s3-hr, last_used_days: 80}
+  - {eid: "e:s3:10", type: CAN_READ, src: policy:s3-hr-4, dst: db:s3-hr, last_used_days: 90}
+  - {eid: "e:s3:11", type: CAN_ASSUME, src: group:s3-contractors, dst: role:s3-wiki, last_used_days: 2}
+  - {eid: "e:s3:12", type: HAS_POLICY, src: role:s3-wiki, dst: policy:s3-wiki, last_used_days: 2}
+  - {eid: "e:s3:13", type: CAN_READ, src: policy:s3-wiki, dst: db:s3-wiki, last_used_days: 1}
+background_links:
+  - {eid: "e:s3:90", type: MEMBER_OF, src: user:mia, dst: group:data-1, last_used_days: 5}
+needs:
+  - {id: need:mia-wiki, principal_id: user:mia, resource_id: db:s3-wiki, reason: "reads team wiki"}
+expect: {reachable_jewels: [db:s3-hr], paths: 4, min_cut: 1, safe: true}

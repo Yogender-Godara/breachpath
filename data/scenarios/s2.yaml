@@ -1,0 +1,38 @@
+id: s2
+title: "Leaked key: role escalation + a saved password on a build server"
+src: user:ravi
+nodes:
+  - {id: user:ravi, label: User, name: ravi, user_type: human, team: eng}
+  - {id: group:s2-ci-deployers, label: Group, name: s2-ci-deployers}
+  - {id: role:s2-deploy-role, label: Role, name: s2-deploy-role, env: staging}
+  - {id: policy:s2-deploy-staging, label: Policy, name: s2-deploy-staging, actions: ["deploy:Run"]}
+  - {id: server:s2-staging, label: Server, name: s2-staging, env: staging}
+  - {id: policy:s2-lambda-admin, label: Policy, name: s2-lambda-admin, actions: ["lambda:CreateFunction", "iam:PassRole"]}
+  - {id: role:s2-data-admin, label: Role, name: s2-data-admin, env: prod}
+  - {id: policy:s2-read-customers, label: Policy, name: s2-read-customers, actions: ["db:Read"]}
+  - {id: db:s2-customers, label: Database, name: s2-customers, env: prod, crown_jewel: true, sensitivity: high}
+  - {id: server:s2-build, label: Server, name: s2-build, env: dev}
+  - {id: secret:s2-billing-pw, label: Secret, name: s2-billing-pw, secret_type: password}
+  - {id: user:s2-billing-svc, label: User, name: s2-billing-svc, user_type: service, team: finance}
+  - {id: policy:s2-read-payments, label: Policy, name: s2-read-payments, actions: ["db:Read"]}
+  - {id: db:s2-payments, label: Database, name: s2-payments, env: prod, crown_jewel: true, sensitivity: high}
+edges:
+  - {eid: "e:s2:01", type: MEMBER_OF, src: user:ravi, dst: group:s2-ci-deployers, last_used_days: 2}
+  - {eid: "e:s2:02", type: CAN_ASSUME, src: group:s2-ci-deployers, dst: role:s2-deploy-role, last_used_days: 3}
+  - {eid: "e:s2:03", type: HAS_POLICY, src: role:s2-deploy-role, dst: policy:s2-deploy-staging, last_used_days: 3}
+  - {eid: "e:s2:04", type: CAN_SSH, src: policy:s2-deploy-staging, dst: server:s2-staging, last_used_days: 5}
+  - {eid: "e:s2:05", type: HAS_POLICY, src: role:s2-deploy-role, dst: policy:s2-lambda-admin, last_used_days: 210}
+  - {eid: "e:s2:06", type: CAN_PASS_ROLE, src: policy:s2-lambda-admin, dst: role:s2-data-admin, last_used_days: 300, technique: "PassRole+CreateFunction"}
+  - {eid: "e:s2:07", type: HAS_POLICY, src: role:s2-data-admin, dst: policy:s2-read-customers, last_used_days: 10}
+  - {eid: "e:s2:08", type: CAN_READ, src: policy:s2-read-customers, dst: db:s2-customers, last_used_days: 1}
+  - {eid: "e:s2:09", type: CAN_SSH, src: user:ravi, dst: server:s2-build, last_used_days: 1}
+  - {eid: "e:s2:10", type: STORES_SECRET, src: server:s2-build, dst: secret:s2-billing-pw, last_used_days: 400}
+  - {eid: "e:s2:11", type: AUTHENTICATES_AS, src: secret:s2-billing-pw, dst: user:s2-billing-svc, last_used_days: 120}
+  - {eid: "e:s2:12", type: HAS_POLICY, src: user:s2-billing-svc, dst: policy:s2-read-payments, last_used_days: 0}
+  - {eid: "e:s2:13", type: CAN_READ, src: policy:s2-read-payments, dst: db:s2-payments, last_used_days: 0}
+background_links:
+  - {eid: "e:s2:90", type: MEMBER_OF, src: user:ravi, dst: group:eng-1, last_used_days: 3}
+needs:
+  - {id: need:ravi-staging, principal_id: user:ravi, resource_id: server:s2-staging, reason: "deploys"}
+  - {id: need:ravi-build, principal_id: user:ravi, resource_id: server:s2-build, reason: "runs builds"}
+expect: {reachable_jewels: [db:s2-customers, db:s2-payments], paths: 2, min_cut: 2, safe: true}

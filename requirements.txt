@@ -1,0 +1,13 @@
+# Runtime dependencies (single source of truth for the Docker image).
+# Pinned in P1.2 from `pip freeze` (top-level packages only).
+falkordb==1.8.0
+redis==8.1.0
+fastapi==0.143.1
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+openai==3.31.0
+mcp==2.3.0
+networkx==3.7
+pyyaml==6.0.3
+streamlit==1.66.0
+httpx==0.28.1

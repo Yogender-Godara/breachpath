@@ -1,0 +1,23 @@
+# LOCAL DEVELOPMENT ONLY. Never use this file on a deployed host.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d falkordb
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm toolbox python spikes/<script>.py
+services:
+  falkordb:
+    ports:
+      - "127.0.0.1:6379:6379"   # loopback only: for local scripts / the stdio MCP demo
+      - "127.0.0.1:3000:3000"   # FalkorDB browser, loopback only
+
+  # Throwaway Python 3.12 container for spikes, tests and data loading (no host installs needed)
+  toolbox:
+    build: .
+    working_dir: /app
+    volumes:
+      - .:/app
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    profiles: ["dev"]

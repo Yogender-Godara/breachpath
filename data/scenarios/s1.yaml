@@ -1,0 +1,18 @@
+id: s1
+title: "Simple chain: a leaked analyst key reaches the finance ledger"
+src: user:alice
+nodes:
+  - {id: user:alice, label: User, name: alice, user_type: human, team: finance}
+  - {id: group:s1-analysts, label: Group, name: s1-analysts}
+  - {id: role:s1-reporting, label: Role, name: s1-reporting, env: prod}
+  - {id: policy:s1-read-ledger, label: Policy, name: s1-read-ledger, actions: ["db:Read"]}
+  - {id: db:s1-ledger, label: Database, name: s1-ledger, env: prod, crown_jewel: true, sensitivity: high}
+edges:
+  - {eid: "e:s1:01", type: MEMBER_OF, src: user:alice, dst: group:s1-analysts, last_used_days: 120}
+  - {eid: "e:s1:02", type: CAN_ASSUME, src: group:s1-analysts, dst: role:s1-reporting, last_used_days: 150}
+  - {eid: "e:s1:03", type: HAS_POLICY, src: role:s1-reporting, dst: policy:s1-read-ledger, last_used_days: 200}
+  - {eid: "e:s1:04", type: CAN_READ, src: policy:s1-read-ledger, dst: db:s1-ledger, last_used_days: 90}
+background_links:
+  - {eid: "e:s1:90", type: MEMBER_OF, src: user:alice, dst: group:finance-1, last_used_days: 3}
+needs: []
+expect: {reachable_jewels: [db:s1-ledger], paths: 1, min_cut: 1, safe: true}

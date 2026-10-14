@@ -18,8 +18,8 @@
 | Phase | Day | Status | Done / Total |
 |---|---|---|---|
 | P0 Pre-kickoff prep | Oct 14 | 🟨 | 4 / 12 |
-| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 7 / 32 |
-| P2 Data and graph | Day 1 | ⬜ | 0 / 28 |
+| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 24 / 32 |
+| P2 Data and graph | Day 1 | 🟨 | 13 / 28 |
 | P3 Queries and min-cut | Day 1 | ⬜ | 0 / 22 |
 | P4 Core tools and guards | Day 2 | ⬜ | 0 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | ⬜ | 0 / 17 |
@@ -28,9 +28,9 @@
 | P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **11 / 203** |
+| **Total** | | | **41 / 203** |
 
-**Now working on:** P1.1 (waiting for your first commit) → P1.2
+**Now working on:** P2.4 Business needs
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -67,31 +67,31 @@
 - [x] `pyproject.toml` (falkordb, fastapi, uvicorn, openai, mcp, pydantic, redis, networkx, pyyaml, streamlit, pytest)
 - [x] README skeleton: title, one-line pitch, a placeholder "AI usage" section, Track 1
 - [x] Copy `docs/` + the problem statement in, labelled "planning notes prepared before kickoff (Rule 8)"
-- [ ] 👤 First commit
+- [x] 👤 First commit
 
 **Done when:** the repo is public and the skeleton is pushed.
 
 ### P1.2 FalkorDB up ⬜ 🤖
-- [ ] `docker-compose.yml` with the `falkordb` service only (volume, `requirepass`, `expose`)
-- [ ] `docker-compose.dev.yml`: `127.0.0.1:6379` + browser `127.0.0.1:3000` (local only)
+- [x] `docker-compose.yml` with the `falkordb` service only (volume, `requirepass`, `expose`)
+- [x] `docker-compose.dev.yml`: `127.0.0.1:6379` + browser `127.0.0.1:3000` (local only)
 - [ ] `docker compose up` → `PING` works and the FalkorDB browser opens
-- [ ] Record the FalkorDB version in `docs/VERIFY_RESULTS.md`
+- [x] Record the FalkorDB version in `docs/VERIFY_RESULTS.md`
 
 **Done when:** FalkorDB answers from Python on localhost.
 
 ### P1.3 FalkorDB feature checks (B1–B7) ⬜ 🤖
 Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to `docs/VERIFY_RESULTS.md`.
-- [ ] **B1** `algo.maxFlow` exists and returns the known max flow on a 4-node graph
-- [ ] **B2a** `edges` from maxFlow carry properties (`e.eid` works)
-- [ ] **B2b** what happens when the flow is 0: a row with `maxFlow = 0`, or no row
-- [ ] **B2c** multiple `targetNodes` work
-- [ ] **B3** `algo.SPpaths`: parameter names, `relDirection` value, `maxLen`, `pathCount`, behaviour when there's no path
-- [ ] **B4** `algo.bfs(node, depth, null)` signature and output
-- [ ] **B5** `GRAPH.COPY` works (and Python `graph.copy()`)
-- [ ] **B6** relationship property index syntax
-- [ ] **B7** `CALL algo.*` after `MATCH … WITH collect(...)`
-- [ ] Apply the fallback for any check that fails ([05 §1](docs/05_Problems_Blockers_Risks.md)), and update the LLD queries
-- [ ] Remove the **[VERIFY]** tag from the docs for each check that passed
+- [x] **B1** `algo.maxFlow` exists and returns the known max flow on a 4-node graph
+- [x] **B2a** `edges` from maxFlow carry properties (`e.eid` works)
+- [x] **B2b** what happens when the flow is 0: a row with `maxFlow = 0`, or no row
+- [x] **B2c** multiple `targetNodes` work
+- [x] **B3** `algo.SPpaths`: parameter names, `relDirection` value, `maxLen`, `pathCount`, behaviour when there's no path
+- [x] **B4** `algo.bfs(node, depth, null)` signature and output
+- [x] **B5** `GRAPH.COPY` works (and Python `graph.copy()`)
+- [x] **B6** relationship property index syntax
+- [x] **B7** `CALL algo.*` after `MATCH … WITH collect(...)`
+- [x] Apply the fallback for any check that fails ([05 §1](docs/05_Problems_Blockers_Risks.md)), and update the LLD queries
+- [x] Remove the **[VERIFY]** tag from the docs for each check that passed
 
 **Done when:** every B1–B7 result is recorded and the design is adjusted where needed.
 
@@ -105,8 +105,8 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 **Done when:** at least one provider passes all 3 calls, and the models are chosen.
 
 ### P1.5 MCP stdio and Streamlit checks (B9) ⬜ 🤖
-- [ ] Hello-world FastMCP server over stdio: the client starts the subprocess, lists tools, calls one (inside the worker container)
-- [ ] Streamlit version supports `st.fragment(run_every=…)`
+- [x] Hello-world MCP server (`MCPServer`) over stdio: the client starts the subprocess, lists tools, calls one (inside the worker container)
+- [x] Streamlit version supports `st.fragment(run_every=…)`
 
 **Done when:** both are confirmed, or their fallbacks are recorded.
 
@@ -119,27 +119,27 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 ## P2: Data and graph (Day 1)
 
 ### P2.1 Schema and client ⬜ 🤖
-- [ ] `core/graph/schema.py`: labels, edge types, `ATTACK_TYPES`, remediation verb per type ([LLD §2.3](docs/03_LLD.md))
-- [ ] `core/graph/client.py`: connection from env, `ro_query` / `query`, per-query timeout, graph-name helpers
-- [ ] Index creation function ([LLD §2.5](docs/03_LLD.md))
+- [x] `core/graph/schema.py`: labels, edge types, `ATTACK_TYPES`, remediation verb per type ([LLD §2.3](docs/03_LLD.md))
+- [x] `core/graph/client.py`: connection from env, `ro_query` / `query`, per-query timeout, graph-name helpers
+- [x] Index creation function ([LLD §2.5](docs/03_LLD.md))
 
 **Done when:** you can connect and create indexes on an empty graph.
 
 ### P2.2 Background company generator ⬜ 🤖
-- [ ] `data/generator.py` skeleton, `SEED=42`
-- [ ] Nodes per [LLD §10.2](docs/03_LLD.md): 6 teams, 50 users (40 humans + 10 service accounts), 12 groups, 15 roles, 25 policies, 10 servers, 10 DBs, 6 secrets
-- [ ] Noise-edge rules (membership, assume, policy, read, SSH, secrets), each with an `eid`
-- [ ] `last_used_days` distribution (about 40% recent, i.e. ≤ 30 days)
-- [ ] Output `graph.json` (nodes + edges)
+- [x] `data/generator.py` skeleton, `SEED=42`
+- [x] Nodes per [LLD §10.2](docs/03_LLD.md): 6 teams, 50 users (40 humans + 10 service accounts), 12 groups, 15 roles, 25 policies, 10 servers, 10 DBs, 6 secrets
+- [x] Noise-edge rules (membership, assume, policy, read, SSH, secrets), each with an `eid`
+- [x] `last_used_days` distribution (about 40% recent, i.e. ≤ 30 days)
+- [x] Output `data/generated/background.json` (nodes + edges)
 
 **Done when:** the same seed always gives the same file.
 
 ### P2.3 Scenario files S1–S3 ⬜ 🤖
-- [ ] YAML schema per [LLD §10.3](docs/03_LLD.md) + parser with validation
-- [ ] `s1.yaml` simple chain
-- [ ] `s2.yaml` problem-statement example (escalation + saved password; needs: staging, build)
-- [ ] `s3.yaml` shared choke point (4 paths, cut = 1)
-- [ ] Planting: add scenario nodes and edges + `background_links` to the background company
+- [x] YAML schema per [LLD §10.3](docs/03_LLD.md) + parser with validation
+- [x] `s1.yaml` simple chain
+- [x] `s2.yaml` problem-statement example (escalation + saved password; needs: staging, build)
+- [x] `s3.yaml` shared choke point (4 paths, cut = 1)
+- [x] Planting: add scenario nodes and edges + `background_links` to the background company
 
 **Done when:** each scenario merges into a valid graph.
 
@@ -322,7 +322,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 ## P6: MCP server and agents: agent mode (Day 2)
 
 ### P6.1 MCP server (stdio) ⬜ 🤖
-- [ ] `mcp_server/server.py`: FastMCP, registers `core.tools`, stdio only
+- [ ] `mcp_server/server.py`: `MCPServer` (mcp 2.x), registers `core.tools`, stdio only. The worker passes FalkorDB env vars via `StdioServerParameters(env=…)`
 - [ ] Profiles `full` / `readonly`
 - [ ] Tool descriptions written for LLMs (short, clear, with limits)
 

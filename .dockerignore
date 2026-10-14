@@ -1,0 +1,9 @@
+# Never bake secrets or local junk into images
+.env
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+data/generated
+eval/results

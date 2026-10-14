@@ -43,7 +43,7 @@ for line in text.splitlines():
         line = f"| **Total** | | | **{tot_d} / {tot_t}** |"
     out.append(line)
 
-io.open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
+io.open(path, "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n")  # keep LF on Windows
 for k, (d, t) in counts.items():
     print(k, d, "/", t)
 print("TOTAL", tot_d, "/", tot_t)
