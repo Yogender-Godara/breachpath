@@ -23,14 +23,14 @@
 | P3 Queries and min-cut | Day 1 | 🟨 | 19 / 22 |
 | P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 15 / 17 |
-| P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 14 / 20 |
+| P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
 | P7 Reporter and UI | Day 3 | ⬜ | 0 / 12 |
 | P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **133 / 203** |
+| **Total** | | | **136 / 203** |
 
-**Now working on:** P6.6 Agent-mode pipeline and worker
+**Now working on:** P6.7 Review ⑥ + Day 2 gate (you), then P7.1 Reporter
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -355,10 +355,10 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** on S8 it picks the zero-collateral cut.
 
-### P6.6 Agent-mode pipeline and worker ⬜ 🤖
-- [ ] `run_incident(mode="agent")` uses the LLM brains, checkpoints and events after each step
-- [ ] `worker/main.py`: consume `jobs`, take the lock + heartbeat, start the MCP subprocess (restart on crash), janitor (sandbox TTL)
-- [ ] Add `worker` + `api` services to `docker-compose.yml`
+### P6.6 Agent-mode pipeline and worker ✅ 🤖
+- [x] `run_incident(mode="agent")` uses the LLM brains, checkpoints and events after each step
+- [x] `worker/main.py`: consume `jobs`, take the lock + heartbeat, one MCP session per agent step (opened and closed inside the step), janitor (sandbox TTL)
+- [x] Add `worker` + `api` services to `docker-compose.yml`
 
 **Done when:** `POST /incidents` on S2 → status `DONE` with live events.
 
@@ -496,6 +496,8 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 15 | MCP session per agent step (P6.6) | LLD 5 / HLD 5.4: one MCP stdio subprocess per worker process, restarted on crash → one stdio session per agent step (Investigate, Plan), opened and closed inside the step with `asyncio.run`; the worker is a plain sync loop | No event loop shared across threads; a crashed MCP subprocess only affects one step; no restart logic to write | Yes (LLD §5, §8, HLD §5.4, §9) |
+| Oct 15 | A 400 for the model's bad tool call (P6.6) | LLD 6.1: any other 4xx is raised as our bug → a 400 where the provider rejected the MODEL's own malformed tool call (Groq `tool_use_failed`) is transient: one retry, then the next provider, then degrade | Found live (S5, Groq): the incident ended FAILED because of one model slip | Yes (LLD §6.1) |
 | Oct 15 | Injected tool params (cache follow-up) | LLD 6.1: only `incident_id` and `lock_token` are hidden from the LLM → any param the code already knows (`graph`, `sandbox`, `src`) is injected too (`run_agent(inject=...)`); tool results are compact and key-sorted; the code sets the plan label (`chosen`) from the min-cut candidate names | The incident id in the messages defeated the cache across incidents; fewer arguments for the model to get wrong; fewer tokens | Yes (LLD §6.1, §6.2, docs/06) |
 | Oct 15 | Planner rules (P6.5) | LLD 6.2: the LLM plans every time → no LLM call when the cut is not safe or after a failed Planner cut; a cut is accepted only if simulated ok AND without protected/missing edges; no set is ever simulated twice (a repeated `simulate_cut` is answered from the results already seen) | The split suggestion is proven in code (the LLM adds nothing, and free calls are scarce); `simulate_cut` is limited to 6 per incident and a provider restart re-runs the agent | Yes (LLD §6.2, §16, docs/06 §3) |
 | Oct 15 | LLM 429 wait (P6.5) | One retry after 1.5 s → a 429 waits for its `retry-after` header (capped at `LLM_MAX_WAIT_S` = 20 s), then retries once | Groq's 8000 tokens/minute: back-to-back agents hit 429, and 1.5 s is far too short | Yes (LLD §6.1, §12) |

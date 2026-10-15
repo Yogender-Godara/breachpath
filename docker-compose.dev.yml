@@ -1,7 +1,7 @@
 # LOCAL DEVELOPMENT ONLY. Never use this file on a deployed host.
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d falkordb
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build api worker   (api on 127.0.0.1:8000)
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build api worker   (api on 127.0.0.1:${API_PORT:-8000})
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm toolbox python spikes/<script>.py
 services:
   falkordb:
@@ -11,7 +11,7 @@ services:
 
   api:
     ports:
-      - "127.0.0.1:8000:8000"   # loopback only: /docs and curl
+      - "127.0.0.1:${API_PORT:-8000}:8000"   # loopback only: /docs and curl (API_PORT if 8000 is taken)
 
   # Throwaway Python 3.12 container for spikes, tests and data loading (no host installs needed)
   toolbox:

@@ -21,7 +21,7 @@ services:
 
   api:
     build: .
-    image: breachpath:local   # api and worker are the same image with different commands
+    # api and worker are built from the same Dockerfile (the second build is fully cached) and run different commands
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     expose:
       - "8000"
@@ -35,7 +35,6 @@ services:
 
   worker:
     build: .
-    image: breachpath:local
     command: python -m worker.main
     env_file: .env
     environment:

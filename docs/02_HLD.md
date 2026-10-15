@@ -159,7 +159,7 @@ stateDiagram-v2
 
 ### 5.4 How agents use MCP
 
-- The Worker is an **MCP client**. At startup it launches the BreachPath MCP server as a **stdio subprocess** (one per worker process), lists its tools, and converts each agent's **allow-listed tools** into OpenAI-format `tools` (function name, description, JSON schema). If the subprocess dies, the worker restarts it and retries the tool call once.
+- The Worker is an **MCP client**. Each LLM agent step (Investigate, Plan) launches the BreachPath MCP server as its own **stdio subprocess** (`python -m mcp_server.server`), lists its tools, converts the agent's **allow-listed tools** into OpenAI-format `tools` (function name, description, JSON schema), and closes the session when the step ends. A crashed subprocess only affects that step (the pipeline marks it `FAILED`, or `NEEDS_HUMAN` for a `MinCutError`).
 - When the model returns `tool_calls`, the Worker calls the MCP tool and sends back a `role: "tool"` message with the result.
 - This meets the Track 1 focus on "tool selection through MCP", with no network listener at all: stdio is a private pipe between two processes.
 - **Bonus:** the same MCP server can be added to Claude Desktop or Claude Code, so judges can call BreachPath tools directly.
@@ -227,7 +227,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | LLM throughput | SDK retries | Per-worker concurrency cap + queue backpressure |
 | DB contention | Graphs, queue, state and cache in one FalkorDB instance (fine at about 150 nodes: algorithms take milliseconds) | Move the queue, state, locks and LLM cache to a **separate Redis**, so heavy graph algorithms can never slow the event bus |
 | Min-cut input (Q7) | All attack edges loaded into Python (a few hundred) | Load only the sub-graph between src and the crown jewels (nodes reachable from src AND able to reach a jewel) |
-| MCP subprocess | One per worker process | Unchanged: it scales with the workers |
+| MCP subprocess | One per agent step (opened and closed inside the step) | Unchanged: it scales with the workers |
 
 ---
 
