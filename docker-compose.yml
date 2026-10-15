@@ -2,7 +2,7 @@
 # Local-only ports and the toolbox live in docker-compose.dev.yml.
 services:
   falkordb:
-    image: falkordb/falkordb:latest
+    image: falkordb/falkordb:6.0.2   # pinned: :latest drifted (graph ver 42201) after the image cache was lost
     environment:
       # Redis password. Set FALKORDB_PASSWORD in .env (copy env.example → .env).
       REDIS_ARGS: "--requirepass ${FALKORDB_PASSWORD:?set FALKORDB_PASSWORD in .env}"

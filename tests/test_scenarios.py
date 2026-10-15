@@ -5,9 +5,10 @@ import pytest
 
 from data.generator import build_background, validate
 from data.scenarios import load_scenario, plant, reaches
+from tests.helpers import SCENARIOS
 
 DIR = Path(__file__).parent.parent / "data" / "scenarios"
-IDS = ["s1", "s2", "s3"]
+IDS = SCENARIOS
 
 
 @pytest.fixture(scope="module")

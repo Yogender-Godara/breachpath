@@ -7,7 +7,6 @@ from pathlib import Path
 import yaml
 
 from data.generator import build_background, validate
-from data.truth import check_expect, compute_truth
 
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
 OUT_DIR = Path("data/generated")
@@ -94,6 +93,15 @@ def reaches(combined, src):
     return seen
 
 
+def build(sid):
+    """The planted company with its business needs, built in memory (the API's product path: no truth, no JSON files)."""
+    from data.needs import build_needs  # imported here: needs.py imports reaches() from this module
+
+    combined = plant(build_background(), load_scenario(SCENARIO_DIR / f"{sid}.yaml"))
+    combined["needs"] = build_needs(combined)
+    return combined
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ids", nargs="*", help="scenario ids, e.g. s1 s2 s3")
@@ -101,6 +109,7 @@ def main():
     args = ap.parse_args()
     ids = sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml")) if args.all else args.ids
     from data.needs import build_needs  # imported here: needs.py imports reaches() from this module
+    from data.truth import check_expect, compute_truth  # networkx: generator and eval only, never the API
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for sid in ids:

@@ -20,17 +20,17 @@
 | P0 Pre-kickoff prep | Oct 14 | 🟨 | 4 / 12 |
 | P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 25 / 32 |
 | P2 Data and graph | Day 1 | 🟨 | 25 / 28 |
-| P3 Queries and min-cut | Day 1 | 🟨 | 18 / 22 |
-| P4 Core tools and guards | Day 2 | ⬜ | 0 / 26 |
-| P5 Pipeline, state and API (fast mode) | Day 2 | ⬜ | 0 / 17 |
+| P3 Queries and min-cut | Day 1 | 🟨 | 19 / 22 |
+| P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
+| P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 14 / 17 |
 | P6 MCP server and agents (agent mode) | Day 2 | ⬜ | 0 / 20 |
 | P7 Reporter and UI | Day 3 | ⬜ | 0 / 12 |
 | P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **72 / 203** |
+| **Total** | | | **113 / 203** |
 
-**Now working on:** P3.5 Cross-check with networkx
+**Now working on:** P5.5 Fast mode on all scenarios + review ④⑤
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -210,8 +210,8 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** `pytest tests/test_mincut.py` is green.
 
-### P3.5 Cross-check with networkx ⬜ 🤖
-- [ ] FalkorDB min-cut size == networkx min-cut size on S1–S3
+### P3.5 Cross-check with networkx ✅ 🤖
+- [x] FalkorDB min-cut size == networkx min-cut size on S1–S3
 
 **Done when:** the two independent implementations agree.
 
@@ -224,91 +224,91 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P4: Core tools and guards (Day 2)
 
-### P4.1 Read tools ⬜ 🤖
-- [ ] `core/tools/read.py`: `get_blast_radius`, `find_attack_paths` (k ≤ 50, truncated flag), `shortest_paths`
-- [ ] `edge_path_frequency`, `choke_points` (samplingSize ≥ node count)
-- [ ] `get_node`, `get_edge`, `run_readonly_cypher` (RO, timeout, 200-row cap)
-- [ ] `compute_min_cut` (candidates, witnesses, max flow, safe, protect_cap, protected_in_way)
-- [ ] Uniform error model `{ok:false, error:{code, message}}`
+### P4.1 Read tools ✅ 🤖
+- [x] `core/tools/read.py`: `get_blast_radius`, `find_attack_paths` (k ≤ 50, truncated flag), `shortest_paths`
+- [x] `edge_path_frequency`, `choke_points` (samplingSize ≥ node count)
+- [x] `get_node`, `get_edge`, `run_readonly_cypher` (RO, timeout, 200-row cap)
+- [x] `compute_min_cut` (candidates, witnesses, max flow, safe, protect_cap, protected_in_way)
+- [x] Uniform error model `{ok:false, error:{code, message}}`
 
 **Done when:** every read tool works on S2 from a Python shell.
 
-### P4.2 Guards ⬜ 🤖
-- [ ] `core/tools/guards.py`: sandbox-name regex
-- [ ] Lock-owner check (`lock:inc:{id}` == token)
-- [ ] Scope (graph name contains the incident id) + quota (3 sandboxes + 6 simulations per incident, 20 graphs total)
-- [ ] Tests: a baseline write is refused, a wrong token is refused, the quota is enforced (AC-5)
+### P4.2 Guards ✅ 🤖
+- [x] `core/tools/guards.py`: sandbox-name regex
+- [x] Lock-owner check (`lock:inc:{id}` == token)
+- [x] Scope (graph name contains the incident id) + quota (3 sandboxes + 6 simulations per incident, 20 graphs total)
+- [x] Tests: a baseline write is refused, a wrong token is refused, the quota is enforced (AC-5)
 
 **Done when:** `pytest tests/test_guards.py` is green.
 
-### P4.3 Write tools ⬜ 🤖
-- [ ] `create_sandbox` (GRAPH.COPY, reused if it already exists, tracked in `sbx:expiry`)
-- [ ] `protect_business_paths` (company-wide needs, protect_cap)
-- [ ] `apply_fix` (idempotent, refuses protected edges)
+### P4.3 Write tools ✅ 🤖
+- [x] `create_sandbox` (GRAPH.COPY, reused if it already exists, tracked in `sbx:expiry`)
+- [x] `protect_business_paths` (company-wide needs, protect_cap)
+- [x] `apply_fix` (idempotent, refuses protected edges)
 
 **Done when:** sandbox → protect → apply works on S2 and the baseline is unchanged.
 
-### P4.4 Simulation and collateral ⬜ 🤖
-- [ ] Q12 before snapshot, cached per sandbox
-- [ ] `simulate_cut`: copy to `-sim-n`, apply, verify, Q12 after, collateral (weighted), delete the copy
-- [ ] Returns `blocks_attack`, `needs_ok`, `broken_needs`, `collateral`, `size`, `min_size`, `stale_days_total`
+### P4.4 Simulation and collateral ✅ 🤖
+- [x] Q12 before snapshot, cached per sandbox
+- [x] `simulate_cut`: copy to `-sim-n`, apply, verify, Q12 after, collateral (weighted), delete the copy
+- [x] Returns `blocks_attack`, `needs_ok`, `broken_needs`, `collateral`, `size`, `min_size`, `stale_days_total`
 
 **Done when:** both S2 candidates are simulated and collateral numbers are produced.
 
-### P4.5 Verify tool ⬜ 🤖
-- [ ] `verify_fix`: A maxFlow = 0, B bfs reaches no jewel, C every need ok, D collateral report
-- [ ] A/B mismatch → `pass=false`, "proof mismatch"
+### P4.5 Verify tool ✅ 🤖
+- [x] `verify_fix`: A maxFlow = 0, B bfs reaches no jewel, C every need ok, D collateral report
+- [x] A/B mismatch → `pass=false`, "proof mismatch"
 
 **Done when:** S2 after the fix: pass ✅.
 
-### P4.6 Split simulation (S) ⬜ 🤖
-- [ ] CASE 0: src legitimately needs a jewel → `rotate_credentials`
-- [ ] Find the divergence node (Role/Policy/Group only)
-- [ ] Split in a `-split` sandbox → re-run min-cut → verify → `proven`
+### P4.6 Split simulation (S) ✅ 🤖
+- [x] CASE 0: src legitimately needs a jewel → `rotate_credentials`
+- [x] Find the divergence node (Role/Policy/Group only)
+- [x] Split in a `-split` sandbox → re-run min-cut → verify → `proven`
 
 **Done when:** S5 gives a **proven** policy-split suggestion.
 
-### P4.7 Scenarios S4–S8 ⬜ 🤖
-- [ ] `s4.yaml` decoys (precision)
-- [ ] `s5.yaml` no safe fix (divergence node = Policy)
-- [ ] `s6.yaml` betweenness trap (hub group)
-- [ ] `s7.yaml` 8-hop path (completeness)
-- [ ] `s8.yaml` collateral choice (two equal cuts)
-- [ ] Ground truth + `expect` pass for all 8; all loaded
+### P4.7 Scenarios S4–S8 ✅ 🤖
+- [x] `s4.yaml` decoys (precision)
+- [x] `s5.yaml` no safe fix (divergence node = Policy)
+- [x] `s6.yaml` betweenness trap (hub group)
+- [x] `s7.yaml` 8-hop path (completeness)
+- [x] `s8.yaml` collateral choice (two equal cuts)
+- [x] Ground truth + `expect` pass for all 8; all loaded
 
-**Done when:** `python -m data.generate --all` succeeds.
+**Done when:** `python -m data.scenarios --all` succeeds.
 
 ---
 
 ## P5: Pipeline, state and API: fast mode (Day 2)
 
-### P5.1 State, events and lock ⬜ 🤖
-- [ ] `orchestrator/state.py`: incident JSON load/save (checkpoint)
-- [ ] `orchestrator/events.py`: `XADD inc:{id}:events` with the event schema ([LLD §8](docs/03_LLD.md))
-- [ ] `orchestrator/lock.py`: `SET NX PX` + heartbeat task every 15 s (Lua check-and-extend) + safe release
+### P5.1 State, events and lock ✅ 🤖
+- [x] `orchestrator/state.py`: incident JSON load/save (checkpoint)
+- [x] `orchestrator/events.py`: `XADD inc:{id}:events` with the event schema ([LLD §8](docs/03_LLD.md))
+- [x] `orchestrator/lock.py`: `SET NX PX` + heartbeat thread every 15 s (Lua check-and-extend) + safe release
 
 **Done when:** a test shows the heartbeat keeps a 90 s task's lock alive.
 
-### P5.2 State machine and retry policy ⬜ 🤖
-- [ ] `orchestrator/state_machine.py`: statuses + transitions ([LLD §7](docs/03_LLD.md))
-- [ ] `retry_change()`: retry only when an input changes; invariant violations → `NEEDS_HUMAN`
+### P5.2 State machine and retry policy ✅ 🤖
+- [x] `orchestrator/state_machine.py`: statuses + transitions ([LLD §7](docs/03_LLD.md))
+- [x] `retry_change()`: retry only when an input changes; invariant violations → `NEEDS_HUMAN`
 
 **Done when:** unit tests cover pass, retry-with-change, no-change → NEEDS_HUMAN, and max 3 attempts.
 
-### P5.3 One pipeline: fast brains ⬜ 🤖
-- [ ] `core/pipeline.py: run_incident(incident, mode)` with shared Prepare / Execute / Verify
-- [ ] Fast brains: deterministic findings, code ranking (collateral → size → staleness), template report
-- [ ] Executor validation (eids exist, not protected)
+### P5.3 One pipeline: fast brains ✅ 🤖
+- [x] `core/pipeline.py: run_incident(incident, mode)` with shared Prepare / Execute / Verify
+- [x] Fast brains: deterministic findings, code ranking (collateral → size → staleness), template report
+- [x] Executor validation (eids exist, not protected)
 
 **Done when:** `run_incident(mode="fast")` finishes S2 with a correct plan and pass.
 
-### P5.4 FastAPI ⬜ 🤖
-- [ ] `/healthz`, `/readyz` (pings FalkorDB)
-- [ ] `GET /scenarios`, `POST /scenarios/{sid}/load` (409 if an incident is active)
-- [ ] `POST /analyze` (fast mode, sync, sandbox deleted in `finally`)
-- [ ] `POST /incidents` (Idempotency-Key, demo token for agent mode, rate limit, max 2 active)
-- [ ] `GET /incidents/{id}`, `GET /incidents/{id}/events?after=`, `GET /incidents/{id}/graph`
-- [ ] Error format + codes ([LLD §9](docs/03_LLD.md))
+### P5.4 FastAPI ✅ 🤖
+- [x] `/healthz`, `/readyz` (pings FalkorDB)
+- [x] `GET /scenarios`, `POST /scenarios/{sid}/load` (409 if an incident is active)
+- [x] `POST /analyze` (fast mode, sync, sandbox deleted in `finally`)
+- [x] `POST /incidents` (Idempotency-Key, demo token for agent mode, rate limit, max 2 active)
+- [x] `GET /incidents/{id}`, `GET /incidents/{id}/events?after=`, `GET /incidents/{id}/graph`
+- [x] Error format + codes ([LLD §9](docs/03_LLD.md))
 
 **Done when:** `/docs` works locally and `/analyze` on S2 returns the right answer.
 
@@ -495,7 +495,11 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 |---|---|---|---|---|
 | Oct 15 | Background usage needs (P2.4) | Random `last_used_days` only → one "daily work" chain per team's first human is forced recent (0–30) | Seed 42 gave ZERO usage needs: a 4-hop path is all-recent only ~2.5% of the time | Yes (LLD §10.2) |
 | Oct 15 | FalkorDB browser host port (P1.2) | `127.0.0.1:3000` → `127.0.0.1:3300` | Port 3000 is used by another project on the dev machine | Yes (LLD §1) |
+| Oct 15 | Split simulation rule (P4.6) | D = "a node with an outgoing flow edge NOT on any protected path" → D = a node on the witness path where the needs of the edge in and the edge out diverge (business non-empty, conflict empty); D must be a Role/Policy/Group. Edges record `r.needs`. `split_suggestion` is its own write tool, not part of `compute_min_cut` | `maxFlow ≥ PROTECT_CAP` is equivalent to an all-protected attack path, so the old rule can never hold (proved with a networkx prototype) | Yes (LLD §4.1, §5) |
+| Oct 15 | "Recently used" for collateral (P4.4) | "recent" = 30 days (undefined) → the lost pair was reachable before the fix via edges all used within `COLLATERAL_RECENT_DAYS` = 90; weight 3 recent, 1 otherwise | Pairs within 30 days are usage needs and are protected, so a 30-day rule would never fire | Yes (LLD §4.2, §8, §12) |
 | Oct 15 | Parallel edges (P3.4) | Duplicate `(src, dst)` pairs allowed → loader rejects them | `algo.maxFlow` fails on multi-edges ("requires a simple adjacency matrix"); generated data already can't have them | Yes (LLD §2.3, §4.1; VERIFY_RESULTS) |
+| Oct 15 | FalkorDB image pin (P4.7 step 0) | `falkordb/falkordb:latest` → `falkordb/falkordb:6.0.2` | pin 6.0.2: `:latest` drifted after the image cache was lost (graph module ver 42201 instead of 60002) | Yes (VERIFY_RESULTS) |
+| Oct 15 | Lock heartbeat (P5.1) | background `asyncio` task → background `threading.Thread` (`hold_lock` context manager yielding a handle with `.token` and `.lost`) | The same lock must work in the sync fast-mode API and in the async worker; a thread needs no event loop | Yes (LLD §1, §8) |
 | Oct 15 | Edge storage (P3.1) | 8 relationship types → one `:ATTACK` type with `r.kind` = the real type | `algo.maxFlow` accepts exactly one relationship type; the 8-type list in Q6 failed live | Yes (LLD §2.3, §2.5, Q0-Q12; VERIFY_RESULTS) |
 | Oct 15 | Loader CLI (P2.6) | `python -m data.load` → `python -m core.graph.loader` | The loader is product code (the API reuses it), and LLD §1 already puts it in `core/graph/` | Task only (LLD already right) |
 

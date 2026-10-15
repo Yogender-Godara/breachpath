@@ -1,0 +1,28 @@
+id: s5
+title: "No safe fix: the attack path is made only of business-protected edges"
+src: user:zoe
+nodes:
+  - {id: user:zoe, label: User, name: zoe, user_type: human, team: ops}
+  - {id: group:s5-release, label: Group, name: s5-release}
+  - {id: role:s5-release, label: Role, name: s5-release, env: prod}
+  - {id: policy:s5-shared-ops, label: Policy, name: s5-shared-ops, actions: ["ssh:Login", "db:Read"]}
+  - {id: server:s5-deploy, label: Server, name: s5-deploy, env: prod}
+  - {id: db:s5-finance, label: Database, name: s5-finance, env: prod, crown_jewel: true, sensitivity: high}
+  - {id: user:s5-ann, label: User, name: s5-ann, user_type: human, team: finance}
+  - {id: group:s5-analysts, label: Group, name: s5-analysts}
+  - {id: role:s5-analyst, label: Role, name: s5-analyst, env: prod}
+edges:
+  - {eid: "e:s5:01", type: MEMBER_OF, src: user:zoe, dst: group:s5-release, last_used_days: 5}
+  - {eid: "e:s5:02", type: CAN_ASSUME, src: group:s5-release, dst: role:s5-release, last_used_days: 6}
+  - {eid: "e:s5:03", type: HAS_POLICY, src: role:s5-release, dst: policy:s5-shared-ops, last_used_days: 6}
+  - {eid: "e:s5:04", type: CAN_SSH, src: policy:s5-shared-ops, dst: server:s5-deploy, last_used_days: 4}
+  - {eid: "e:s5:05", type: CAN_READ, src: policy:s5-shared-ops, dst: db:s5-finance, last_used_days: 45}
+  - {eid: "e:s5:06", type: MEMBER_OF, src: user:s5-ann, dst: group:s5-analysts, last_used_days: 200}
+  - {eid: "e:s5:07", type: CAN_ASSUME, src: group:s5-analysts, dst: role:s5-analyst, last_used_days: 210}
+  - {eid: "e:s5:08", type: HAS_POLICY, src: role:s5-analyst, dst: policy:s5-shared-ops, last_used_days: 220}
+background_links:
+  - {eid: "e:s5:90", type: MEMBER_OF, src: user:zoe, dst: group:ops-1, last_used_days: 3}
+needs:
+  - {id: need:zoe-deploy, principal_id: user:zoe, resource_id: server:s5-deploy, reason: "deploys from the shared ops policy"}
+  - {id: need:ann-finance, principal_id: user:s5-ann, resource_id: db:s5-finance, reason: "reads the finance database"}
+expect: {reachable_jewels: [db:s5-finance], paths: 1, safe: false}

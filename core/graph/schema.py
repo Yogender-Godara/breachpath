@@ -17,7 +17,8 @@ EDGE_TYPES = {
     "CAN_READ": {"from": ["Policy"], "to": ["Database"], "remediation": "Remove the statement from the policy"},
     "CAN_SSH": {"from": ["User", "Policy"], "to": ["Server"], "remediation": "Revoke the SSH key / access grant"},
     "CAN_PASS_ROLE": {"from": ["Policy"], "to": ["Role"], "remediation": "Remove PassRole for that role from the policy"},
-    "STORES_SECRET": {"from": ["Server"], "to": ["Secret"], "remediation": "Delete the file and rotate the secret"},
+    "STORES_SECRET": {"from": ["Server"], "to": ["Secret"], "remediation": "Delete the file and rotate the secret",
+                      "host_action": True},  # a host change, not an IAM call: ranked last (LLD 4.2)
     "AUTHENTICATES_AS": {"from": ["Secret"], "to": ["User", "Role", "Database"], "remediation": "Rotate the credential"},
 }
 ATTACK_PATTERN = EDGE_TYPE  # used as -[:{ATTACK_PATTERN}*1..N]->
@@ -31,6 +32,7 @@ INDEX_QUERIES = [
 
 _ID = re.compile(r"[a-z0-9-]+")
 _SANDBOX = re.compile(r"t:[a-z0-9-]+:sbx:[a-z0-9-]+")
+_BASELINE = re.compile(r"t:[a-z0-9-]+:baseline")
 
 
 def _check(value):
@@ -51,3 +53,14 @@ def sandbox_name(scenario, incident_id, suffix=""):
 
 def is_sandbox(name):
     return _SANDBOX.fullmatch(name) is not None
+
+
+def baseline_of(sandbox):
+    """t:{scenario}:sbx:{anything} -> t:{scenario}:baseline"""
+    if not is_sandbox(sandbox):
+        raise ValueError(f"{sandbox!r} is not a sandbox name")
+    return baseline_name(sandbox.split(":")[1])
+
+
+def is_baseline(name):
+    return _BASELINE.fullmatch(name) is not None

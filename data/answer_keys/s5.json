@@ -1,0 +1,210 @@
+{
+ "business_needs": [
+  {
+   "id": "need:zoe-deploy",
+   "principal_id": "user:zoe",
+   "resource_id": "server:s5-deploy",
+   "valid": true
+  },
+  {
+   "id": "need:ann-finance",
+   "principal_id": "user:s5-ann",
+   "resource_id": "db:s5-finance",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:data-01:db:10",
+   "principal_id": "user:data-01",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:data-02:db:10",
+   "principal_id": "user:data-02",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:data-05:db:10",
+   "principal_id": "user:data-05",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:eng-01:db:08",
+   "principal_id": "user:eng-01",
+   "resource_id": "db:08",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:eng-03:db:08",
+   "principal_id": "user:eng-03",
+   "resource_id": "db:08",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:finance-01:db:02",
+   "principal_id": "user:finance-01",
+   "resource_id": "db:02",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:finance-04:db:02",
+   "principal_id": "user:finance-04",
+   "resource_id": "db:02",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:finance-06:db:02",
+   "principal_id": "user:finance-06",
+   "resource_id": "db:02",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:finance-07:db:02",
+   "principal_id": "user:finance-07",
+   "resource_id": "db:02",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:ops-01:db:10",
+   "principal_id": "user:ops-01",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:ops-06:db:10",
+   "principal_id": "user:ops-06",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:sales-01:db:05",
+   "principal_id": "user:sales-01",
+   "resource_id": "db:05",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:sales-03:db:05",
+   "principal_id": "user:sales-03",
+   "resource_id": "db:05",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:security-01:db:07",
+   "principal_id": "user:security-01",
+   "resource_id": "db:07",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:security-01:db:10",
+   "principal_id": "user:security-01",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:svc-01:db:08",
+   "principal_id": "user:svc-01",
+   "resource_id": "db:08",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:svc-02:db:10",
+   "principal_id": "user:svc-02",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:svc-05:db:10",
+   "principal_id": "user:svc-05",
+   "resource_id": "db:10",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:svc-10:db:05",
+   "principal_id": "user:svc-10",
+   "resource_id": "db:05",
+   "valid": true
+  },
+  {
+   "id": "need:usage:user:zoe:db:10",
+   "principal_id": "user:zoe",
+   "resource_id": "db:10",
+   "valid": true
+  }
+ ],
+ "crown_jewels": [
+  "db:s5-finance"
+ ],
+ "long_path_jewels": [],
+ "min_cut_size": 175,
+ "protect_cap": 175,
+ "protected_eids": [
+  "e:bg:0001",
+  "e:bg:0002",
+  "e:bg:0003",
+  "e:bg:0005",
+  "e:bg:0007",
+  "e:bg:0009",
+  "e:bg:0011",
+  "e:bg:0019",
+  "e:bg:0023",
+  "e:bg:0030",
+  "e:bg:0036",
+  "e:bg:0045",
+  "e:bg:0047",
+  "e:bg:0052",
+  "e:bg:0056",
+  "e:bg:0058",
+  "e:bg:0060",
+  "e:bg:0062",
+  "e:bg:0063",
+  "e:bg:0066",
+  "e:bg:0067",
+  "e:bg:0069",
+  "e:bg:0071",
+  "e:bg:0073",
+  "e:bg:0074",
+  "e:bg:0077",
+  "e:bg:0082",
+  "e:bg:0083",
+  "e:bg:0087",
+  "e:bg:0091",
+  "e:bg:0095",
+  "e:bg:0098",
+  "e:bg:0100",
+  "e:bg:0104",
+  "e:bg:0105",
+  "e:bg:0109",
+  "e:bg:0114",
+  "e:bg:0124",
+  "e:bg:0127",
+  "e:bg:0143",
+  "e:bg:0146",
+  "e:bg:0153",
+  "e:bg:0154",
+  "e:s5:01",
+  "e:s5:02",
+  "e:s5:03",
+  "e:s5:04",
+  "e:s5:05",
+  "e:s5:06",
+  "e:s5:07",
+  "e:s5:08",
+  "e:s5:90"
+ ],
+ "reachable_jewels": [
+  "db:s5-finance"
+ ],
+ "safe_fix_exists": false,
+ "scenario": "s5",
+ "src": "user:zoe",
+ "true_paths": [
+  [
+   "e:s5:01",
+   "e:s5:02",
+   "e:s5:03",
+   "e:s5:05"
+  ]
+ ]
+}

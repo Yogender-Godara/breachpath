@@ -20,6 +20,12 @@ def test_name_helpers():
     assert schema.sandbox_name("s1", "abc", "-split") == "t:s1:sbx:abc-split"
 
 
+def test_baseline_of():
+    assert schema.baseline_of(schema.sandbox_name("s2", "inc-1", "-sim-3")) == "t:s2:baseline"
+    with pytest.raises(ValueError):
+        schema.baseline_of("t:s2:baseline")
+
+
 def test_is_sandbox():
     assert schema.is_sandbox(schema.sandbox_name("s1", "abc-123"))
     assert schema.is_sandbox("t:s1:sbx:fast-1a2b3c4d")

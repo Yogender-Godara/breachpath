@@ -6,6 +6,7 @@ from data.generator import build_background
 from data.needs import build_needs
 from data.scenarios import load_scenario, plant
 from data.truth import build_graph, check_expect, compute_truth, shortest_edge_path
+from tests.helpers import SCENARIOS
 
 DIR = Path(__file__).parent.parent / "data" / "scenarios"
 
@@ -53,6 +54,17 @@ def test_seven_hop_chain_is_a_long_path_jewel():
     assert truth["true_paths"] == []
 
 
+def test_expect_long_path_jewels_is_optional_and_compared_as_a_set():
+    chain = [("e1", "user:a", "user:b"), ("e2", "user:b", "user:c"), ("e3", "user:c", "user:d"), ("e4", "user:d", "user:e"),
+             ("e5", "user:e", "user:f"), ("e6", "user:f", "user:g"), ("e7", "user:g", "db:j")]
+    truth = compute_truth(toy(chain))
+    base = {"reachable_jewels": ["db:j"], "paths": 0, "min_cut": 1, "safe": True}
+    check_expect(truth, base)  # key absent: not checked
+    check_expect(truth, {**base, "long_path_jewels": ["db:j"]})
+    with pytest.raises(ValueError, match="long_path_jewels"):
+        check_expect(truth, {**base, "long_path_jewels": []})
+
+
 def test_no_reachable_jewel_means_cut_zero():
     truth = compute_truth(toy([("e1", "user:a", "user:b"), ("e2", "user:c", "db:j")]))
     assert truth["reachable_jewels"] == [] and truth["min_cut_size"] == 0
@@ -62,7 +74,7 @@ def test_no_reachable_jewel_means_cut_zero():
 def scenarios():
     background = build_background(42)
     out = {}
-    for sid in ("s1", "s2", "s3"):
+    for sid in SCENARIOS:
         sc = load_scenario(DIR / f"{sid}.yaml")
         graph = plant(background, sc)
         graph["needs"] = build_needs(graph)
@@ -70,7 +82,7 @@ def scenarios():
     return out
 
 
-@pytest.mark.parametrize("sid", ["s1", "s2", "s3"])
+@pytest.mark.parametrize("sid", SCENARIOS)
 def test_scenarios_match_their_expect_block(scenarios, sid):
     sc, graph = scenarios[sid]
     check_expect(compute_truth(graph), sc["expect"])
@@ -90,7 +102,7 @@ def test_answer_key_has_exactly_the_lld_keys(scenarios):
          "protected_eids", "protect_cap", "min_cut_size", "safe_fix_exists", "business_needs"])
 
 
-@pytest.mark.parametrize("sid", ["s1", "s2", "s3"])
+@pytest.mark.parametrize("sid", SCENARIOS)
 def test_same_input_twice_gives_identical_answer_key(scenarios, sid):
     _, graph = scenarios[sid]
     assert compute_truth(graph) == compute_truth(graph)

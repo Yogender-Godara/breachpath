@@ -1,32 +1,20 @@
-"""Min-cut tests: S1-S3 on real data, pure unit tests of min_cut() (no database), then toy graphs in FalkorDB."""
+"""Min-cut tests: the scenarios on real data, pure unit tests of min_cut() (no database), then toy graphs in FalkorDB."""
 import json
 from contextlib import contextmanager
 
+import networkx as nx  # test oracle only; the graph itself is built by data.truth
 import pytest
 from redis.exceptions import ResponseError
 
 from core.graph import client, loader, mincut, queries
 from core.graph.mincut import MinCutError, compute_min_cut, min_cut
 from core.graph.schema import baseline_name, sandbox_name
-
-
-@contextmanager
-def protected_copy(sid):
-    """Baseline copy with every valid need protected (cap = protect_cap), deleted afterwards."""
-    loader.load_scenario(sid)
-    sbx = sandbox_name(sid, "p33test")
-    client.delete_graph(sbx)
-    client.get_graph(baseline_name(sid)).copy(sbx)
-    try:
-        protect_cap = client.ro_query(sbx, queries.PROTECT_CAP)[0][0]
-        client.query(sbx, queries.PROTECT_NEEDS, {"protect_cap": protect_cap})
-        yield sbx
-    finally:
-        client.delete_graph(sbx)
+from data.truth import build_graph
+from tests.helpers import SAFE, protected_copy
 
 
 def test_s2_cut(falkordb):
-    with protected_copy("s2") as sbx:
+    with protected_copy("s2", "p33test") as sbx:
         result = compute_min_cut(sbx, "user:ravi")
     print(json.dumps(result, indent=1))
     source, sink = result["candidates"]
@@ -37,15 +25,31 @@ def test_s2_cut(falkordb):
     assert source["witness"]["e:s2:10"] == ["e:s2:09", "e:s2:10", "e:s2:11", "e:s2:12", "e:s2:13"]
 
 
-@pytest.mark.parametrize("sid", ["s1", "s3"])
-def test_cut_size_matches_the_answer_key(falkordb, sid):
+@pytest.mark.parametrize("sid", SAFE)
+def test_falkordb_min_cut_agrees_with_networkx(falkordb, sid):
+    with open(loader.GENERATED_DIR / f"{sid}.json", encoding="utf-8") as f:
+        graph = json.load(f)
     with open(loader.GENERATED_DIR.parent / "answer_keys" / f"{sid}.json", encoding="utf-8") as f:
         key = json.load(f)
-    with protected_copy(sid) as sbx:
+    with protected_copy(sid, "p33test") as sbx:
         result = compute_min_cut(sbx, key["src"])
-    source, sink = result["candidates"]
-    assert len(source["eids"]) == key["min_cut_size"] and result["safe"] is True
-    assert len(sink["eids"]) == key["min_cut_size"]
+
+    # 1. size and verdict
+    assert int(result["max_flow"]) == key["min_cut_size"] and result["safe"] == key["safe_fix_exists"]
+    ends = {e["eid"]: (e["src"], e["dst"]) for e in graph["edges"]}
+    needs = [n for n in key["business_needs"] if n["valid"]]
+    for candidate in result["candidates"]:
+        print(f"{sid} {candidate['name']}: {candidate['eids']}")
+        assert len(candidate["eids"]) == key["min_cut_size"]
+        # 2. networkx confirms the candidate cuts every path to a jewel
+        G = build_graph(graph)
+        for eid in candidate["eids"]:
+            G.remove_edge(*ends[eid], key=eid)
+        assert not set(key["reachable_jewels"]) & nx.descendants(G, key["src"])
+        # 3. and every valid need is still reachable
+        assert all(nx.has_path(G, n["principal_id"], n["resource_id"]) for n in needs)
+        # 4. and it never touches a protected edge (tie-breaks could differ in general: LLD 10.4)
+        assert not set(candidate["eids"]) & set(key["protected_eids"])
 
 
 # --- A. Unit tests of the pure min_cut(): flows written by hand, no database ---

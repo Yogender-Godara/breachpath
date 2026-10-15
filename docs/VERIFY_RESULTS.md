@@ -9,6 +9,16 @@ Results of checking the real FalkorDB system (CLAUDE.md rule 6).
 | Auth enforced (`ping` without password → NOAUTH) | yes | 2026-10-15 |
 | Python client connect (`spikes/ping_falkordb.py`) | ok | 2026-10-15 |
 
+## Image pin (P4.7 step 0)
+
+2026-10-15. After the WSL crash lost the image cache, `docker-compose.yml` (`falkordb/falkordb:latest`) re-pulled a different build: graph module ver **42201**, digest `sha256:b0bdcac2...`, not the 60002 (6.0.2) everything was verified on.
+
+| Item | Result |
+|---|---|
+| Fix | `docker-compose.yml` pins `falkordb/falkordb:6.0.2` (digest `sha256:107455e8...`). Container recreated; the `falkordb-data` volume kept all data (baselines s1, s2, s3 still listed) |
+| `MODULE LIST` after recreate | `graph` ver **60002**, `vectorset` ver 1; container healthy |
+| Toolbox `pytest -q` on 6.0.2 | 165 passed |
+
 ## P1.3 feature checks
 
 Script: `spikes/verify_falkordb.py` (one toy graph per check). FalkorDB 6.0.2, run 2026-10-15.

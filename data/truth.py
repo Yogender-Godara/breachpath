@@ -67,8 +67,11 @@ def compute_truth(graph):
 
 def check_expect(truth, expect):
     got = {"reachable_jewels": set(truth["reachable_jewels"]), "paths": len(truth["true_paths"]),
-           "min_cut": truth["min_cut_size"], "safe": truth["safe_fix_exists"]}
+           "min_cut": truth["min_cut_size"], "safe": truth["safe_fix_exists"],
+           "long_path_jewels": set(truth["long_path_jewels"])}
     want = {**expect, "reachable_jewels": set(expect["reachable_jewels"])}
+    if "long_path_jewels" in want:  # optional: jewels reachable only beyond MAX_HOPS
+        want["long_path_jewels"] = set(want["long_path_jewels"])
     bad = [f"{key}: expected {want[key]}, got {got[key]}" for key in got if key in want and want[key] != got[key]]
     if bad:
         raise ValueError(f"{truth['scenario']}: expect mismatch: " + "; ".join(bad))

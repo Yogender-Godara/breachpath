@@ -1,0 +1,33 @@
+id: s4
+title: "Precision: one real path among decoys (a low-value DB, a shared group, an inbound secret)"
+src: user:leo
+nodes:
+  - {id: user:leo, label: User, name: leo, user_type: human, team: finance}
+  - {id: group:s4-finance, label: Group, name: s4-finance}
+  - {id: role:s4-ledger, label: Role, name: s4-ledger, env: prod}
+  - {id: policy:s4-read-vault, label: Policy, name: s4-read-vault, actions: ["db:Read"]}
+  - {id: db:s4-vault, label: Database, name: s4-vault, env: prod, crown_jewel: true, sensitivity: high}
+  - {id: policy:s4-logs, label: Policy, name: s4-logs, actions: ["logs:Read"]}
+  - {id: db:s4-logs, label: Database, name: s4-logs, env: prod, crown_jewel: false, sensitivity: low}
+  - {id: group:s4-shared, label: Group, name: s4-shared}
+  - {id: user:s4-auditor, label: User, name: s4-auditor, user_type: human, team: security}
+  - {id: policy:s4-audit, label: Policy, name: s4-audit, actions: ["db:Read"]}
+  - {id: server:s4-old, label: Server, name: s4-old, env: dev}
+  - {id: secret:s4-old-key, label: Secret, name: s4-old-key, secret_type: api-key}
+edges:
+  - {eid: "e:s4:01", type: MEMBER_OF, src: user:leo, dst: group:s4-finance, last_used_days: 5}
+  - {eid: "e:s4:02", type: CAN_ASSUME, src: group:s4-finance, dst: role:s4-ledger, last_used_days: 120}
+  - {eid: "e:s4:03", type: HAS_POLICY, src: role:s4-ledger, dst: policy:s4-read-vault, last_used_days: 200}
+  - {eid: "e:s4:04", type: CAN_READ, src: policy:s4-read-vault, dst: db:s4-vault, last_used_days: 60}
+  - {eid: "e:s4:05", type: HAS_POLICY, src: role:s4-ledger, dst: policy:s4-logs, last_used_days: 7}
+  - {eid: "e:s4:06", type: CAN_READ, src: policy:s4-logs, dst: db:s4-logs, last_used_days: 3}
+  - {eid: "e:s4:07", type: MEMBER_OF, src: user:leo, dst: group:s4-shared, last_used_days: 10}
+  - {eid: "e:s4:08", type: MEMBER_OF, src: user:s4-auditor, dst: group:s4-shared, last_used_days: 10}
+  - {eid: "e:s4:09", type: HAS_POLICY, src: user:s4-auditor, dst: policy:s4-audit, last_used_days: 15}
+  - {eid: "e:s4:10", type: CAN_READ, src: policy:s4-audit, dst: db:s4-vault, last_used_days: 15}
+  - {eid: "e:s4:11", type: STORES_SECRET, src: server:s4-old, dst: secret:s4-old-key, last_used_days: 300}
+  - {eid: "e:s4:12", type: AUTHENTICATES_AS, src: secret:s4-old-key, dst: user:leo, last_used_days: 300}
+background_links:
+  - {eid: "e:s4:90", type: MEMBER_OF, src: user:leo, dst: group:finance-1, last_used_days: 3}
+needs: []
+expect: {reachable_jewels: [db:s4-vault], paths: 1, min_cut: 1, safe: true}

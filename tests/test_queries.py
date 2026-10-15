@@ -5,6 +5,7 @@ import pytest
 
 from core.graph import client, loader, queries
 from core.graph.schema import baseline_name, sandbox_name
+from tests.helpers import SCENARIOS
 
 BASE = baseline_name("s2")
 SBX = sandbox_name("s2", "p31test")
@@ -32,7 +33,7 @@ def test_blast_radius(s2):
 
 
 def test_attack_paths(s2):
-    rows = read(queries.ATTACK_PATHS, src=SRC, k=20)
+    rows = read(queries.ATTACK_PATHS, src=SRC, k=20, target=None)
     assert len(rows) == 2
     assert {r[0] for r in rows} == JEWELS
     assert [r[3] for r in rows] == sorted(r[3] for r in rows)
@@ -116,9 +117,9 @@ def test_baseline_is_unchanged(s2):
     assert read("MATCH ()-[r {eid: 'e:s2:05'}]->() RETURN count(r)")[0][0] == 1
 
 
-# --- Query results vs the networkx answer keys (S1-S3) ---
+# --- Query results vs the networkx answer keys (S1-S8) ---
 
-@pytest.fixture(scope="module", params=["s1", "s2", "s3"])
+@pytest.fixture(scope="module", params=SCENARIOS)
 def case(request, falkordb):
     sid = request.param
     loader.load_scenario(sid)
@@ -135,7 +136,8 @@ def test_q1_blast_radius_matches_key(case):
 
 def test_q2_attack_paths_match_true_paths(case):
     sid, key = case
-    rows = client.ro_query(baseline_name(sid), queries.ATTACK_PATHS, {"src": key["src"], "k": len(key["true_paths"]) + 10})
+    rows = client.ro_query(baseline_name(sid), queries.ATTACK_PATHS,
+                         {"src": key["src"], "k": len(key["true_paths"]) + 10, "target": None})
     assert {tuple(r[2]) for r in rows} == {tuple(p) for p in key["true_paths"]}  # recall and precision 100%
     assert len(rows) == len(key["true_paths"])  # no duplicates, nothing extra
 

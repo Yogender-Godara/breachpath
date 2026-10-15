@@ -1,0 +1,26 @@
+id: s7
+title: "Completeness: an 8-hop path beyond the 6-hop query bound"
+src: user:nia
+nodes:
+  - {id: user:nia, label: User, name: nia, user_type: human, team: eng}
+  - {id: group:s7-dev, label: Group, name: s7-dev}
+  - {id: role:s7-dev, label: Role, name: s7-dev, env: dev}
+  - {id: policy:s7-ci, label: Policy, name: s7-ci, actions: ["iam:PassRole"]}
+  - {id: role:s7-ci, label: Role, name: s7-ci, env: staging}
+  - {id: policy:s7-ssh, label: Policy, name: s7-ssh, actions: ["ssh:Login"]}
+  - {id: server:s7-ci, label: Server, name: s7-ci, env: staging}
+  - {id: secret:s7-db-pw, label: Secret, name: s7-db-pw, secret_type: password}
+  - {id: db:s7-billing, label: Database, name: s7-billing, env: prod, crown_jewel: true, sensitivity: high}
+edges:
+  - {eid: "e:s7:01", type: MEMBER_OF, src: user:nia, dst: group:s7-dev, last_used_days: 6}
+  - {eid: "e:s7:02", type: CAN_ASSUME, src: group:s7-dev, dst: role:s7-dev, last_used_days: 80}
+  - {eid: "e:s7:03", type: HAS_POLICY, src: role:s7-dev, dst: policy:s7-ci, last_used_days: 90}
+  - {eid: "e:s7:04", type: CAN_PASS_ROLE, src: policy:s7-ci, dst: role:s7-ci, last_used_days: 100}
+  - {eid: "e:s7:05", type: HAS_POLICY, src: role:s7-ci, dst: policy:s7-ssh, last_used_days: 110}
+  - {eid: "e:s7:06", type: CAN_SSH, src: policy:s7-ssh, dst: server:s7-ci, last_used_days: 120}
+  - {eid: "e:s7:07", type: STORES_SECRET, src: server:s7-ci, dst: secret:s7-db-pw, last_used_days: 130}
+  - {eid: "e:s7:08", type: AUTHENTICATES_AS, src: secret:s7-db-pw, dst: db:s7-billing, last_used_days: 140}
+background_links:
+  - {eid: "e:s7:90", type: MEMBER_OF, src: user:nia, dst: group:eng-2, last_used_days: 3}
+needs: []
+expect: {reachable_jewels: [db:s7-billing], paths: 0, min_cut: 1, safe: true, long_path_jewels: [db:s7-billing]}

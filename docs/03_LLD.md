@@ -30,6 +30,7 @@ breachpath/
 │   │   ├── write.py            # sandbox, protect, apply_fix
 │   │   ├── verify.py           # verify_fix
 │   │   └── guards.py           # sandbox-name guard, lock owner, quota, eid validation
+│   ├── fast_brains.py          # investigate / plan / report in plain code (fast mode, and the degraded fallback)
 │   └── pipeline.py             # run_incident(mode): the ONE orchestration pipeline (fast + agent)
 ├── mcp_server/
 │   └── server.py               # thin MCPServer (mcp 2.x) wrapper over core.tools, stdio transport only
@@ -46,7 +47,7 @@ breachpath/
 ├── orchestrator/
 │   ├── state_machine.py        # steps, transitions, retry policy (used by core/pipeline.py)
 │   ├── state.py                # incident state load/save (checkpoint)
-│   ├── lock.py                 # incident lock + heartbeat task
+│   ├── lock.py                 # incident lock + heartbeat thread
 │   └── events.py               # event emitter (Redis stream)
 ├── api/
 │   ├── main.py                 # FastAPI app
@@ -369,7 +370,7 @@ Several cuts can have the same minimum size. They differ in **who else loses acc
 
 | Order | Criterion | Source |
 |---|---|---|
-| 1 | **Collateral**: number of `(other principal, resource)` pairs that lose access (Q12 before/after). Weighted: recently used = 3, stale = 1. | `simulate_cut` |
+| 1 | **Collateral**: number of `(other principal, resource)` pairs that lose access (Q12 before/after). Weighted: recently used = 3, stale = 1. "Recently used" = the pair was reachable **before** the fix through edges that were **all** used within `COLLATERAL_RECENT_DAYS` (90, not 30: pairs within 30 days are usage needs and are protected, so a 30-day rule would never fire). | `simulate_cut` |
 | 2 | **Size** vs the minimum (`max_flow`) | `simulate_cut` |
 | 3 | **Staleness**: total `last_used_days` (higher is better) | `simulate_cut` |
 | 4 | **Remediation type**: prefer IAM changes over host actions | edge type |
@@ -378,41 +379,44 @@ Several cuts can have the same minimum size. They differ in **who else loses acc
 
 The Planner may also **propose its own cut** (e.g. combining edges from both candidates, or using `edge_path_frequency` ideas). Any proposal is tested with `simulate_cut`. **Only cuts that `simulate_cut` reports as `blocks_attack = true` and `needs_ok = true` may be submitted.** The final report shows `cut size − minimum` (0 = optimal).
 
-### 4.1 "No safe fix": deterministic split simulation (decision D13)
+### 4.1 "No safe fix": deterministic split simulation (decision D13, corrected in P4.6)
 
-When `maxFlow ≥ PROTECT_CAP`, the min-cut contains protected edges. A node on a business path also leads the attacker onward. We compute the suggestion **in code and prove it** in a second sandbox. The LLM only puts it into words.
+When `maxFlow ≥ PROTECT_CAP`, an attack path made **only of protected edges** exists. We compute the suggestion **in code and prove it** in a second sandbox (`-split`). The LLM only puts it into words. The pipeline calls `split_suggestion` (`core/tools/split.py`) when `compute_min_cut` says `safe = false`.
+
+> **Correction (P4.6):** the first design picked D as "a node with an outgoing flow edge that is NOT on any protected path". That can never hold here: `maxFlow ≥ PROTECT_CAP` is *equivalent* to an all-protected attack path. The rule below replaces it. Every protected edge records the needs that protect it (`r.needs`, set by `protect_business_paths`).
 
 ```text
-INPUT : sandbox S (protected), cut C, flow from Q6, protected paths per need
-P = [e in C if e.protected]
+INPUT : sandbox S (protected), the min-cut result (cut edges, witness paths, protected_in_way)
 
-CASE 0: some need's resource IS a crown jewel and its principal IS the compromised src
+CASE 0: a valid need has principal == src and its resource is a reachable crown jewel
         → "Unavoidable: this identity legitimately needs <jewel>. Rotate/disable its credentials."
-          (no permission change can help; proven by definition) → return
+          suggestion_type = rotate_credentials, proven = true (by definition) → return
 
-for each protected edge p in P:
-   1. Walk the business path forward from p's end node.
-      D = first node on that path that has an outgoing edge with flow > 0
-          that is NOT on any protected path        (the "divergence node": the business and attack paths split here)
-      ONLY Role, Policy or Group nodes can be split (they're config objects).
-      If D is a Server, User, Secret or Database → no split; suggestion = "rotate credentials / isolate host"
-      for that node, proven = false → continue with the next p.
-   2. S2 = GRAPH.COPY S → t:{sc}:sbx:{inc}-split
-   3. In S2: create D' = copy of D (id = D.id + "-biz", same labels/props)
-             move the protected incoming edge of D (the one on the business path) → points to D'
-             copy D's protected outgoing edges to D' (cap = PROTECT_CAP)
-   4. Re-run min-cut on S2. If safe: apply that cut on S2 and run the Verifier on S2.
-   5. If pass → suggestion PROVEN:
-        "Split <D> into <D> and <D>-biz. <principal> keeps <D>-biz (only <business edges>).
-         Then remove <cut edges>. Verified: maxFlow = 0, all needs ok."
-   else → try the next p. If none passes → suggestion = "manual review", proven = false.
+Walk each witness path of a protected cut edge (deduplicated), pair by pair (e_in, e_out), D = e_in's end node:
+   business = needs(e_in) - needs(e_out)        conflict = needs(e_in) & needs(e_out)
+   D is a divergence point if business is non-empty and conflict is empty.
+   D is splittable if it is a Role, Policy or Group (config objects). A Server, User, Secret or Database is never split.
 
-NOTE (P3.4): the split never creates a multi-edge. D' is a new node, so the moved incoming edge and the copied outgoing edges all form new (src, dst) pairs.
+for each splittable D in path order (at most 3 tries):
+   1. reset t:{sc}:sbx:{inc}-split = GRAPH.COPY of S (guarded, counts as a sandbox in the quota)
+   2. in it: create D' (id = D.id + "-biz", same label and properties)
+             move e_in to point at D' (same eid and properties)
+             for each protected out-edge of D that serves a need in `business`: copy it from D' to the same target
+             (eid + "-biz", protected, needs = those needs)
+      Every pair created is new, so there is never a multi-edge.
+   3. set cap = the NEW PROTECT_CAP on every protected edge (the edge count grew)
+   4. re-run min-cut on the split sandbox. If safe: apply its source-side cut (may be empty), then run the Verifier checks
+      (max_flow = 0, no jewel reached, every need ok).
+   5. pass → PROVEN. "Split <D> into <D> and <D>-biz. <principals> keeps <D>-biz (only <business edges>).
+                       Then remove: <cut edges, or nothing>. Verified: maxFlow = 0, all needs ok."
+   else → try the next D.
+If no splittable D works: if a non-config divergence point exists (e.g. a Server), return suggestion_type = manual naming that
+node ("rotate credentials / isolate host"), proven = false; otherwise "manual review". The -split sandbox of a failed attempt is deleted.
 
 OUTPUT: {suggestion_type: "rotate_credentials"|"split_node"|"manual", split_node, new_node,
-         moved_edges, then_remove, proven: bool}
+         moved_edges, copied_edges, then_remove, proven: bool, text}
 ```
-> The suggestion is shown as **"verified"** only if `proven = true`. The baseline is never changed.
+> The suggestion is shown as **"verified"** only if `proven = true`. A proven split keeps its `-split` sandbox (the UI shows it; the TTL cleans it). The baseline and the main sandbox are never changed.
 
 ---
 
@@ -423,26 +427,29 @@ OUTPUT: {suggestion_type: "rotate_credentials"|"split_node"|"manual", split_node
 | `get_blast_radius` | `graph, src` | `[{id, name}]` | R | RO query, timeout |
 | `find_attack_paths` | `graph, src, target?, k≤50` | `[{target, node_ids, eids, hops}]`, `truncated` | R | hops ≤ 6, `LIMIT k` |
 | `shortest_paths` | `graph, src, target, k≤10` | `[{eids, hops}]` | R | |
-| `edge_path_frequency` | `graph, src, top≤20` | `[{eid, type, paths_through}]` | R | `max_paths` = 500 |
-| `choke_points` | `graph, top≤20` | betweenness + frequency merged | R | sampling = node count |
-| `compute_min_cut` | `graph, src` | `{candidates: [{name, eids, witness: {eid: [eids]}}], max_flow, safe, protect_cap, protected_in_way[], split_suggestion}`. `split_suggestion` comes from §4.1 when `safe=false`. | R* | sanity assert. *Creates the `-split` sandbox internally (guarded) |
+| `edge_path_frequency` | `graph, src, top≤20` | `[{eid, kind, paths_through}]` | R | `max_paths` = 500 |
+| `choke_points` | `graph, src, top≤20` | betweenness + frequency merged | R | sampling = node count |
+| `compute_min_cut` | `graph, src` | `{candidates: [{name, eids, witness: {eid: [eids]}}], max_flow, safe, protect_cap, protected_in_way[]}`. When `safe=false` the pipeline calls `split_suggestion`. | R | sanity check (`MinCutError` is an invariant violation, never a tool error) |
+| `split_suggestion` | `sandbox, src` (+ incident_id, lock_token) | `{suggestion_type, split_node, new_node, moved_edges, copied_edges, then_remove, proven, text}` (§4.1) | **W** | sandbox guard; creates the `-split` sandbox (quota). BAD_INPUT if a safe cut exists. Called by the pipeline, not the LLM. |
 | `simulate_cut` | `sandbox, src, eids[]` | `{blocks_attack, needs_ok, broken_needs[], collateral: {count, weighted, pairs[≤20]}, size, min_size, stale_days_total}` | R* | `GRAPH.COPY` → `-sim-{n}`, apply, run Verifier + Q12, `GRAPH.DELETE`. Max 6 per incident. Guarded. |
 | `check_business_access` | `graph` | `[{need_id, ok}]` | R | |
 | `get_node` / `get_edge` | `graph, id` / `graph, eid` | properties + neighbors | R | |
 | `run_readonly_cypher` | `graph, query, params` | rows (≤ 200) | R | **`GRAPH.RO_QUERY` only**, timeout, row cap |
 | `create_sandbox` | `tenant, incident_id` | `{sandbox}` | **W** | dest must match the sandbox pattern. If it exists, reuse it (idempotent). |
-| `protect_business_paths` | `sandbox` | `{protected_eids, unreachable_needs}` | **W** | sandbox guard |
+| `protect_business_paths` | `sandbox, second_path_needs[]?` | `{protected_eids, unreachable_needs, protect_cap}` | **W** | sandbox guard. `second_path_needs`: also protect those needs' 2nd shortest path (retry change `protect_second_path`; the pipeline passes every such need tried so far) |
+| `delete_sandbox` | `sandbox` | `{deleted}` | **W** | sandbox guard; also removes its `sbx:expiry` entry and `reach:{sandbox}:*` keys. Idempotent. Used by Prepare and by the API's `finally`. |
 | `apply_fix` | `sandbox, eids[], reason` | `{deleted, missing, refused_protected}` | **W** | sandbox guard; refuses protected edges |
 | `verify_fix` | `sandbox, src` | `Verdict` | R | runs Q6 + Q9 + Q11 |
 
 **Write guards** (in `guards.py`, run before every W tool, all must pass):
 ```text
 1. name : re.fullmatch(r"t:[a-z0-9-]+:sbx:[a-z0-9-]+", graph)          else GUARD_REFUSED
-2. owner: the call carries {incident_id, lock_token};
-          Redis GET lock:inc:{incident_id} == lock_token                 else GUARD_REFUSED
+2. scope: the name after ":sbx:" is exactly the incident id (+ "-split" / "-sim-<n>")   else GUARD_REFUSED
+3. owner: the call carries {incident_id, lock_token};
+          Redis GET lock:inc:{incident_id} == lock_token (a missing lock = refused)   else GUARD_REFUSED
           (fast mode uses its own short-lived lock the same way)
-3. scope: graph name contains that incident_id                           else GUARD_REFUSED
-4. quota: at most 3 sandboxes + 6 simulations per incident, 20 graphs in total   else LIMIT_EXCEEDED
+4. quota (only when creating a NEW graph): at most 3 sandboxes (incl. -split) per incident,
+          6 simulations per incident (a Redis counter, because simulation copies are deleted), 20 graphs in total   else LIMIT_EXCEEDED
 ```
 
 **Exposure (decisions D12, D19):** the MCP server has **no network listener**. It speaks **stdio only**:
@@ -496,6 +503,7 @@ on LLMUnavailable, MAX_TURNS, or invalid output twice → deterministic fallback
 LLM OUTPUT (kept small: the LLM writes only what needs judgment)
 Findings     { reachable_jewels: [id], paths: [{target, eids[]}], truncated: bool, notes: str }
 FixPlan      { cut_eids: [eid], chosen: "source_side"|"sink_side"|"custom", reasons: [{eid, why}], notes: str }
+             (code adds source: "code"|"planner" = who chose the cut; the retry policy reads it, §7.1)
 
 ENRICHED IN CODE after validation (the LLM never writes these)
 Findings  += node_ids per path, hops, path_count_by_target, top_edges   (from tool results)
@@ -503,7 +511,8 @@ FixPlan   += safe, max_flow, witness per eid, simulation result (collateral, siz
 ActionResult { sandbox: str, protected_eids: [eid], applied_eids: [eid],
                missing: [eid], refused_protected: [eid] }
 Verdict      { pass: bool, attack_max_flow: number, bfs_reached_jewels: [id],
-               business: [{need_id, ok}], failure_detail: str|null }
+               business: [{need_id, ok}], collateral: {count, weighted, pairs}, already_broken: [need_id],
+               failure_detail: str|null }
 Report       { markdown: str }
 ```
 
@@ -533,9 +542,14 @@ EXECUTE (after the Planner):
 A. attack_max_flow = Q6 on sandbox          → must be 0
 B. reached = Q9 (algo.bfs) on sandbox       → must contain no crown jewel
 C. business = Q11 on sandbox                → every need ok (company-wide needs, not just src's)
-D. collateral = Q12 before vs after         → reported (not a pass/fail gate: unused access may be lost)
+D. collateral = Q12 baseline vs sandbox      → reported (not a pass/fail gate: unused access may be lost).
+   The baseline is the exact "before": a fresh sandbox is the baseline plus cap/protected properties only.
+E. already_broken = needs with valid=false  → listed, ignored for pass (LLD §16)
 pass = (A == 0) and (B empty) and all(C)
-if A and B disagree → pass = false, failure_detail = "proof mismatch" (flags a bug, never hidden)
+failure_detail (first match wins; text for humans only: the retry policy reads the verdict fields, never this string):
+  A and B disagree → "proof mismatch: max_flow <A>, bfs reached <B>" (flags a bug, never hidden)
+  attack left      → "attack not blocked: max_flow <A>, reached <B>"
+  needs broken     → "need <id> broken" or "needs <id1>, <id2> broken"
 ```
 
 ---
@@ -563,7 +577,8 @@ Side exits: `DONE_NO_RISK` (no jewel reachable), `NEEDS_HUMAN` (no safe fix, a f
 { id, tenant, src, mode: "agent"|"fast", status, attempt, degraded,
   baseline_graph, sandbox_graph, created_at, updated_at,
   findings: Findings, plan: FixPlan, action: ActionResult, verdict: Verdict, report: Report,
-  history: [{attempt, plan, verdict}] }
+  history: [{attempt, plan, verdict}],
+  tried_changes: [change], retry_change: change|null, failure_detail?: str }   # change = {type, ...} (§7.1)
 ```
 
 ### 7.3 Step loop (checkpointed): one pipeline for both modes
@@ -587,7 +602,7 @@ load state → switch(status):
   PLANNING             → plan = Planner(findings, last verdict, tried_changes) on sandbox
                          if !plan.safe → NEEDS_HUMAN (with the proven/unproven suggestion) else EXECUTING
   EXECUTING            → action = Executor.execute(plan)
-                         invalid plan → PLANNING (counts as an attempt) ; ok → VERIFYING
+                         invalid plan → PLANNING (counts as an attempt; the 3rd → NEEDS_HUMAN) ; ok → VERIFYING
   VERIFYING            → verdict = Verifier()
                          pass → REPORTING
                          fail → change = retry_change(verdict)             # see the retry policy below
@@ -607,7 +622,12 @@ save state after EVERY step (checkpoint) + emit event
 | `inc:{id}` | String (JSON) | incident state | 7 days |
 | `inc:{id}:events` | Stream | events | 7 days |
 | `lock:inc:{id}` | String | worker id (`SET NX PX 60000`, renewed) | 60 s |
-| `idem:{key}` | String | incident id | 24 h |
+| `reach:{sandbox}:{src}` | String (JSON) | "before" snapshot for `simulate_cut`: `{reaches, recent}`. `create_sandbox` deletes it when it makes a new copy. | sandbox TTL |
+| `quota:inc:{id}:sims` | String (counter) | `simulate_cut` calls so far (`INCR`; copies are deleted, so graphs can't be counted) | 7 days |
+| `idem:{key}` | String (JSON) | `{incident_id, hash}` (hash of the request body) | 24 h |
+| `active:{scenario}` | Set | ids of incidents running on that scenario (fast and agent). Blocks a reload (409). Removed in `finally` / by the worker; the set expires after 1 h as a safety net | 1 h |
+| `active:agent` | Set | ids of active agent-mode incidents (for `429 BUSY`) | 1 h |
+| `ratelimit:{ip}:{minute}` | String (counter) | `POST /incidents` calls in that minute | 60 s |
 | `sbx:expiry` | Sorted set | sandbox name → expiry time | — |
 
 **Event:**
@@ -617,12 +637,12 @@ save state after EVERY step (checkpoint) + emit event
 ```
 
 **Worker recovery (scale path, cut in v1: single worker):** `XAUTOCLAIM jobs workers <me> 60000` picks up jobs pending more than 60 s from a dead worker, then resumes from `inc:{id}.status`.
-**Lock heartbeat (`orchestrator/lock.py`):** when a worker takes an incident it runs `SET lock:inc:{id} <worker_token> NX PX 60000`. Then a background `asyncio` task runs **every 15 s** for as long as the incident is being processed:
+**Lock heartbeat (`orchestrator/lock.py`):** when a worker takes an incident it runs `SET lock:inc:{id} <worker_token> NX PX 60000`. Then a background **thread** (not asyncio, so the same lock works in the sync fast-mode API and in the async worker) runs **every 15 s** for as long as the incident is being processed:
 ```text
 if GET lock:inc:{id} == my_token: PEXPIRE lock:inc:{id} 60000      (done atomically with a tiny Lua script)
-else: the lock was lost → cancel the current step, stop, and log "lock_lost". Never keep writing.
+else: the lock was lost → set `handle.lost` and stop the thread; the pipeline checks it between steps and logs "lock_lost". Writes stay safe in the meantime: `guards.check_write` compares the token on every call.
 ```
-The heartbeat is cancelled in `finally`, and the lock is deleted only if it's still ours (also Lua). A slow LLM call (30 s timeout × retries) can't outlive the lock, because the heartbeat keeps renewing it. **v1 runs a single worker** with crash recovery cut, but the heartbeat costs about 20 lines and keeps the design correct if a second worker is added.
+The heartbeat thread is stopped in `finally`, and the lock is deleted only if it's still ours (also Lua). A slow LLM call (30 s timeout × retries) can't outlive the lock, because the heartbeat keeps renewing it. **v1 runs a single worker** with crash recovery cut, but the heartbeat costs about 20 lines and keeps the design correct if a second worker is added.
 
 **Janitor:** every 10 minutes, `GRAPH.DELETE` any sandbox in `sbx:expiry` whose time has passed (TTL 24 h).
 
@@ -798,12 +818,18 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | *(no `PROTECT_CAP` setting)* | computed: edge count + 1 | Capacity of protected edges, per sandbox (§2.3) |
 | `NEED_USAGE_DAYS` | `30` | Edges used within this many days make up company-wide usage needs |
 | `MAX_SIMULATIONS` | `6` | `simulate_cut` calls per incident |
+| `COLLATERAL_RECENT_DAYS` | `90` | A lost pair counts as "recent" (weight 3) if every edge on a path that gave the access was used within this many days |
+| `MAX_SANDBOXES` | `3` | Sandboxes (incl. `-split`) per incident |
+| `MAX_GRAPHS` | `20` | Graphs in FalkorDB in total |
 | `MAX_ATTEMPTS` | `3` | Fix-verify loop limit |
 | `QUERY_TIMEOUT_MS` | `2000` | Per-query timeout |
 | `SANDBOX_TTL_HOURS` | `24` | Sandbox cleanup |
 | `MCP_COMMAND` | `python -m mcp_server.server` | How the worker starts the MCP stdio subprocess |
 | `MCP_PROFILE` | `full` | `full` or `readonly` |
 | `LOCK_TTL_MS` / `LOCK_HEARTBEAT_S` | `60000` / `15` | Incident lock TTL and heartbeat interval |
+| `DEMO_TOKEN` | — | Header `X-Demo-Token` required by `POST /incidents` (agent mode). Empty = agent mode disabled |
+| `RATE_LIMIT_PER_MIN` | `10` | `POST /incidents` per client IP per minute |
+| `MAX_ACTIVE_AGENT` | `2` | Active agent-mode incidents before `429 BUSY` |
 
 ---
 

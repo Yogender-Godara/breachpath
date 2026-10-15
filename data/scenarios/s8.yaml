@@ -1,0 +1,53 @@
+id: s8
+title: "Collateral choice: two equal-size cuts, one breaks 12 stale analysts"
+src: user:max
+nodes:
+  - {id: user:max, label: User, name: max, user_type: human, team: data}
+  - {id: group:s8-max-team, label: Group, name: s8-max-team}
+  - {id: role:s8-dev, label: Role, name: s8-dev, env: dev}
+  - {id: policy:s8-dev, label: Policy, name: s8-dev, actions: ["ssh:Login"]}
+  - {id: server:s8-dev, label: Server, name: s8-dev, env: dev}
+  - {id: role:s8-legacy, label: Role, name: s8-legacy, env: prod}
+  - {id: policy:s8-reports, label: Policy, name: s8-reports, actions: ["db:Read"]}
+  - {id: db:s8-reports, label: Database, name: s8-reports, env: prod, crown_jewel: true, sensitivity: high}
+  - {id: group:s8-analysts, label: Group, name: s8-analysts}
+  - {id: role:s8-analyst, label: Role, name: s8-analyst, env: prod}
+  - {id: user:s8-analyst-01, label: User, name: s8-analyst-01, user_type: human, team: data}
+  - {id: user:s8-analyst-02, label: User, name: s8-analyst-02, user_type: human, team: data}
+  - {id: user:s8-analyst-03, label: User, name: s8-analyst-03, user_type: human, team: data}
+  - {id: user:s8-analyst-04, label: User, name: s8-analyst-04, user_type: human, team: data}
+  - {id: user:s8-analyst-05, label: User, name: s8-analyst-05, user_type: human, team: data}
+  - {id: user:s8-analyst-06, label: User, name: s8-analyst-06, user_type: human, team: data}
+  - {id: user:s8-analyst-07, label: User, name: s8-analyst-07, user_type: human, team: data}
+  - {id: user:s8-analyst-08, label: User, name: s8-analyst-08, user_type: human, team: data}
+  - {id: user:s8-analyst-09, label: User, name: s8-analyst-09, user_type: human, team: data}
+  - {id: user:s8-analyst-10, label: User, name: s8-analyst-10, user_type: human, team: data}
+  - {id: user:s8-analyst-11, label: User, name: s8-analyst-11, user_type: human, team: data}
+  - {id: user:s8-analyst-12, label: User, name: s8-analyst-12, user_type: human, team: data}
+edges:
+  - {eid: "e:s8:01", type: MEMBER_OF, src: user:max, dst: group:s8-max-team, last_used_days: 2}
+  - {eid: "e:s8:02", type: CAN_ASSUME, src: group:s8-max-team, dst: role:s8-dev, last_used_days: 3}
+  - {eid: "e:s8:03", type: HAS_POLICY, src: role:s8-dev, dst: policy:s8-dev, last_used_days: 4}
+  - {eid: "e:s8:04", type: CAN_SSH, src: policy:s8-dev, dst: server:s8-dev, last_used_days: 1}
+  - {eid: "e:s8:05", type: CAN_ASSUME, src: group:s8-max-team, dst: role:s8-legacy, last_used_days: 300}
+  - {eid: "e:s8:06", type: HAS_POLICY, src: role:s8-legacy, dst: policy:s8-reports, last_used_days: 310}
+  - {eid: "e:s8:07", type: CAN_READ, src: policy:s8-reports, dst: db:s8-reports, last_used_days: 150}
+  - {eid: "e:s8:08", type: CAN_ASSUME, src: group:s8-analysts, dst: role:s8-analyst, last_used_days: 150}
+  - {eid: "e:s8:09", type: HAS_POLICY, src: role:s8-analyst, dst: policy:s8-reports, last_used_days: 150}
+  - {eid: "e:s8:10", type: MEMBER_OF, src: user:s8-analyst-01, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:11", type: MEMBER_OF, src: user:s8-analyst-02, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:12", type: MEMBER_OF, src: user:s8-analyst-03, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:13", type: MEMBER_OF, src: user:s8-analyst-04, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:14", type: MEMBER_OF, src: user:s8-analyst-05, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:15", type: MEMBER_OF, src: user:s8-analyst-06, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:16", type: MEMBER_OF, src: user:s8-analyst-07, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:17", type: MEMBER_OF, src: user:s8-analyst-08, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:18", type: MEMBER_OF, src: user:s8-analyst-09, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:19", type: MEMBER_OF, src: user:s8-analyst-10, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:20", type: MEMBER_OF, src: user:s8-analyst-11, dst: group:s8-analysts, last_used_days: 150}
+  - {eid: "e:s8:21", type: MEMBER_OF, src: user:s8-analyst-12, dst: group:s8-analysts, last_used_days: 150}
+background_links:
+  - {eid: "e:s8:90", type: MEMBER_OF, src: user:max, dst: group:data-2, last_used_days: 3}
+needs:
+  - {id: need:max-dev, principal_id: user:max, resource_id: server:s8-dev, reason: "max works on the dev server"}
+expect: {reachable_jewels: [db:s8-reports], paths: 1, min_cut: 1, safe: true}
