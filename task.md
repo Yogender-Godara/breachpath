@@ -18,9 +18,9 @@
 | Phase | Day | Status | Done / Total |
 |---|---|---|---|
 | P0 Pre-kickoff prep | Oct 14 | 🟨 | 4 / 12 |
-| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 24 / 32 |
-| P2 Data and graph | Day 1 | 🟨 | 13 / 28 |
-| P3 Queries and min-cut | Day 1 | ⬜ | 0 / 22 |
+| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 25 / 32 |
+| P2 Data and graph | Day 1 | 🟨 | 25 / 28 |
+| P3 Queries and min-cut | Day 1 | 🟨 | 18 / 22 |
 | P4 Core tools and guards | Day 2 | ⬜ | 0 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | ⬜ | 0 / 17 |
 | P6 MCP server and agents (agent mode) | Day 2 | ⬜ | 0 / 20 |
@@ -28,9 +28,9 @@
 | P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **41 / 203** |
+| **Total** | | | **72 / 203** |
 
-**Now working on:** P2.4 Business needs
+**Now working on:** P3.5 Cross-check with networkx
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -71,10 +71,10 @@
 
 **Done when:** the repo is public and the skeleton is pushed.
 
-### P1.2 FalkorDB up 🟨 🤖
+### P1.2 FalkorDB up ✅ 🤖
 - [x] `docker-compose.yml` with the `falkordb` service only (volume, `requirepass`, `expose`)
-- [x] `docker-compose.dev.yml`: `127.0.0.1:6379` + browser `127.0.0.1:3000` (local only)
-- [ ] `docker compose up` → `PING` works and the FalkorDB browser opens
+- [x] `docker-compose.dev.yml`: `127.0.0.1:6379` + browser `127.0.0.1:3300` (host 3300 → container 3000; 3000 was taken on the dev machine) (local only)
+- [x] `docker compose up` → `PING` works and the FalkorDB browser opens
 - [x] Record the FalkorDB version in `docs/VERIFY_RESULTS.md`
 
 **Done when:** FalkorDB answers from Python on localhost.
@@ -143,27 +143,27 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** each scenario merges into a valid graph.
 
-### P2.4 Business needs ⬜ 🤖
-- [ ] Explicit needs from YAML
-- [ ] Usage needs for **every** principal (all edges on the path ≤ 30 days) ([LLD §2.2](docs/03_LLD.md))
-- [ ] Mark needs with no path as `valid=false` + log a warning
+### P2.4 Business needs ✅ 🤖
+- [x] Explicit needs from YAML
+- [x] Usage needs for **every** principal (all edges on the path ≤ 30 days) ([LLD §2.2](docs/03_LLD.md))
+- [x] Mark needs with no path as `valid=false` + log a warning
 
 **Done when:** each scenario has company-wide `:BusinessNeed` records.
 
-### P2.5 Ground truth (networkx) ⬜ 🤖
-- [ ] Build a `MultiDiGraph` from the final graph
-- [ ] Reachable jewels, true paths ≤ 6 hops, long-path jewels
-- [ ] Protected edges (lowest-eid tie-break), `protect_cap`, min-cut on the split graph with a super-sink
-- [ ] `expect` assertions: generation stops with a clear error on mismatch
-- [ ] Write `answer_keys/sN.json`
+### P2.5 Ground truth (networkx) ✅ 🤖
+- [x] Build a `MultiDiGraph` from the final graph
+- [x] Reachable jewels, true paths ≤ 6 hops, long-path jewels
+- [x] Protected edges (lowest-eid tie-break), `protect_cap`, min-cut on the split graph with a super-sink
+- [x] `expect` assertions: generation stops with a clear error on mismatch
+- [x] Write `answer_keys/sN.json`
 
 **Done when:** S1–S3 answer keys are generated and match their `expect` blocks.
 
-### P2.6 Loader ⬜ 🤖
-- [ ] Q0 batched `UNWIND` per label and per edge type
-- [ ] Load `:BusinessNeed` nodes
-- [ ] Graph name `t:sN:baseline`, delete then load, create indexes
-- [ ] CLI: `python -m data.load s2`
+### P2.6 Loader ✅ 🤖
+- [x] Q0 batched `UNWIND` per label and per edge type
+- [x] Load `:BusinessNeed` nodes
+- [x] Graph name `t:sN:baseline`, delete then load, create indexes
+- [x] CLI: `python -m core.graph.loader s1 s2 s3` (the loader lives in `core/graph/` so the API reuses it, LLD §1)
 
 **Done when:** S1–S3 are loaded, and node and edge counts match `graph.json`.
 
@@ -176,37 +176,37 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P3: Queries and min-cut (Day 1)
 
-### P3.1 Cypher queries ⬜ 🤖
-- [ ] `core/graph/queries.py`: Q1 blast radius, Q2 paths, Q3 SPpaths, Q4 edge frequency
-- [ ] Q5 betweenness, Q6 maxFlow, Q7 all attack edges
-- [ ] Q8 protect (protect_cap = edge count + 1), Q9 bfs, Q10 apply fix, Q11 needs check, Q12 reach sets
-- [ ] Every query parameterized. Edge-type list and hop bound come from constants only.
+### P3.1 Cypher queries ✅ 🤖
+- [x] `core/graph/queries.py`: Q1 blast radius, Q2 paths, Q3 SPpaths, Q4 edge frequency
+- [x] Q5 betweenness, Q6 maxFlow, Q7 all attack edges
+- [x] Q8 protect (protect_cap = edge count + 1), Q9 bfs, Q10 apply fix, Q11 needs check, Q12 reach sets
+- [x] Every query parameterized. Edge-type list and hop bound come from constants only.
 
 **Done when:** every query runs on S2 without errors.
 
-### P3.2 Query tests against answer keys ⬜ 🤖
-- [ ] Q1 / Q2 vs answer keys on S1–S3 (recall and precision = 100%)
-- [ ] Q6 max flow = answer key `min_cut_size`
-- [ ] Q9 bfs reach = answer key `reachable_jewels`
-- [ ] Q11 all needs ok on the untouched baseline
+### P3.2 Query tests against answer keys ✅ 🤖
+- [x] Q1 / Q2 vs answer keys on S1–S3 (recall and precision = 100%)
+- [x] Q6 max flow = answer key `min_cut_size`
+- [x] Q9 bfs reach = answer key `reachable_jewels`
+- [x] Q11 all needs ok on the untouched baseline
 
 **Done when:** `pytest tests/test_queries.py` is green.
 
-### P3.3 Min-cut engine ⬜ 🤖
-- [ ] `core/graph/mincut.py`: build the residual graph (forward and backward arcs)
-- [ ] Source-side cut + **sanity assert** (sum of cut caps == max flow)
-- [ ] Sink-side cut (reverse BFS from the targets)
-- [ ] Witness path per cut edge (walk the flow back to src and forward to a jewel)
-- [ ] `safe = max_flow < protect_cap`
+### P3.3 Min-cut engine ✅ 🤖
+- [x] `core/graph/mincut.py`: build the residual graph (forward and backward arcs)
+- [x] Source-side cut + **sanity assert** (sum of cut caps == max flow)
+- [x] Sink-side cut (reverse BFS from the targets)
+- [x] Witness path per cut edge (walk the flow back to src and forward to a jewel)
+- [x] `safe = max_flow < protect_cap`
 
 **Done when:** it returns candidates + witnesses on S2.
 
-### P3.4 Min-cut unit tests ⬜ 🤖
-- [ ] Textbook graph with a known min-cut
-- [ ] Parallel edges between the same nodes
-- [ ] **R23 test:** the BFS crosses protected edges, and blocking them makes the assert fail
-- [ ] A "no safe fix" graph (`max_flow ≥ protect_cap`)
-- [ ] Many-paths graph: no false "no safe fix"
+### P3.4 Min-cut unit tests ✅ 🤖
+- [x] Textbook graph with a known min-cut
+- [x] Parallel edges between the same nodes
+- [x] **R23 test:** the BFS crosses protected edges, and blocking them makes the assert fail
+- [x] A "no safe fix" graph (`max_flow ≥ protect_cap`)
+- [x] Many-paths graph: no false "no safe fix"
 
 **Done when:** `pytest tests/test_mincut.py` is green.
 
@@ -487,13 +487,17 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Task | Blocker | Fallback taken | Status |
 |---|---|---|---|---|
-| | | | | |
+| Oct 15 | P3.1 | `algo.maxFlow` accepts exactly ONE `relationshipTypes` entry, so Q6 can't span the 8 attack types (LLD Q6 assumed a list; P1.3 only tested one type). Details: VERIFY_RESULTS P3.1 | Q6 kept as in the LLD; its test is `xfail(strict)`. P3.1 left unticked | Closed. Fallback: option A (one `:ATTACK` type, real type in `r.kind`) |
 
 ## Decision changes during build
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
-| | | | | |
+| Oct 15 | Background usage needs (P2.4) | Random `last_used_days` only → one "daily work" chain per team's first human is forced recent (0–30) | Seed 42 gave ZERO usage needs: a 4-hop path is all-recent only ~2.5% of the time | Yes (LLD §10.2) |
+| Oct 15 | FalkorDB browser host port (P1.2) | `127.0.0.1:3000` → `127.0.0.1:3300` | Port 3000 is used by another project on the dev machine | Yes (LLD §1) |
+| Oct 15 | Parallel edges (P3.4) | Duplicate `(src, dst)` pairs allowed → loader rejects them | `algo.maxFlow` fails on multi-edges ("requires a simple adjacency matrix"); generated data already can't have them | Yes (LLD §2.3, §4.1; VERIFY_RESULTS) |
+| Oct 15 | Edge storage (P3.1) | 8 relationship types → one `:ATTACK` type with `r.kind` = the real type | `algo.maxFlow` accepts exactly one relationship type; the 8-type list in Q6 failed live | Yes (LLD §2.3, §2.5, Q0-Q12; VERIFY_RESULTS) |
+| Oct 15 | Loader CLI (P2.6) | `python -m data.load` → `python -m core.graph.loader` | The loader is product code (the API reuses it), and LLD §1 already puts it in `core/graph/` | Task only (LLD already right) |
 
 ## Daily log
 

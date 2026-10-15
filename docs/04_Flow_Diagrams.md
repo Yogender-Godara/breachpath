@@ -329,7 +329,7 @@ flowchart LR
     C --> E["graph.json"]
     D --> E
     D --> F["answer_keys/*.json<br/>true paths, min cut size, safe?"]
-    E --> G["loader.py<br/>UNWIND batches<br/>per label / per type"]
+    E --> G["loader.py<br/>UNWIND batches<br/>per label + one edge query"]
     G --> H[("t:acme:baseline")]
     G --> I["CREATE INDEX<br/>Asset.id, Database.crown_jewel, eid"]
     F --> J["eval/run_eval.py"]

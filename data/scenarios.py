@@ -1,15 +1,17 @@
 """Scenario files (docs/03_LLD.md section 10.3): load, validate, plant into the background company."""
 import argparse
 import json
-from collections import deque
+from collections import Counter, deque
 from pathlib import Path
 
 import yaml
 
 from data.generator import build_background, validate
+from data.truth import check_expect, compute_truth
 
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
 OUT_DIR = Path("data/generated")
+ANSWER_DIR = Path("data/answer_keys")
 REQUIRED = ["id", "title", "src", "nodes", "edges", "background_links", "needs", "expect"]
 EDGE_KEYS = ["eid", "type", "src", "dst", "last_used_days"]
 
@@ -98,6 +100,8 @@ def main():
     ap.add_argument("--all", action="store_true", help="every data/scenarios/*.yaml")
     args = ap.parse_args()
     ids = sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml")) if args.all else args.ids
+    from data.needs import build_needs  # imported here: needs.py imports reaches() from this module
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for sid in ids:
         sc = load_scenario(SCENARIO_DIR / f"{sid}.yaml")
@@ -106,11 +110,23 @@ def main():
         missing = [j for j in sc["expect"]["reachable_jewels"] if j not in found]
         if missing:
             raise ValueError(f"{sid}: expected jewels not reachable from {sc['src']}: {missing}")
+        combined["needs"] = build_needs(combined)
+        truth = compute_truth(combined)
+        check_expect(truth, sc["expect"])
+        ANSWER_DIR.mkdir(parents=True, exist_ok=True)
+        with open(ANSWER_DIR / f"{sid}.json", "w", newline="\n") as f:
+            json.dump(truth, f, sort_keys=True, indent=1)
+            f.write("\n")
         with open(OUT_DIR / f"{sid}.json", "w", newline="\n") as f:
             json.dump(combined, f, sort_keys=True, indent=1)
             f.write("\n")
         jewels = sorted(n["id"] for n in combined["nodes"] if n["props"].get("crown_jewel") and n["id"] in found)
         print(f"{sid}: {len(combined['nodes'])} nodes, {len(combined['edges'])} edges, reachable jewels {jewels}")
+        by_source = Counter(n["source"] for n in combined["needs"])
+        invalid = sum(not n["valid"] for n in combined["needs"])
+        print(f"{sid}: {len(combined['needs'])} needs ({by_source['explicit']} explicit, {by_source['usage']} usage, {invalid} invalid)")
+        print(f"{sid}: answer key ok: {len(truth['true_paths'])} paths, cut {truth['min_cut_size']}, "
+              f"safe {truth['safe_fix_exists']}, {len(truth['protected_eids'])} protected edges")
 
 
 if __name__ == "__main__":

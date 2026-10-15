@@ -93,6 +93,15 @@ def build_background(seed=SEED):
     for sec in secrets:
         edge("AUTHENTICATES_AS", sec, rng.choice(services))
 
+    # Daily work: a 4-hop path is all-recent only ~2.5% of the time, so without this the
+    # background has no usage needs. Each team's first human gets one fully recent chain.
+    for team in TEAMS:
+        node_id = f"user:{team}-01"
+        for etype in ("MEMBER_OF", "CAN_ASSUME", "HAS_POLICY", "CAN_READ"):
+            step = next(e for e in edges if e["type"] == etype and e["src"] == node_id)
+            step["last_used_days"] = rng.randint(0, 30)
+            node_id = step["dst"]
+
     graph = {"seed": seed, "nodes": nodes, "edges": edges}
     validate(graph)
     return graph

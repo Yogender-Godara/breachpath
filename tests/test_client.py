@@ -1,11 +1,11 @@
-"""Needs a running FalkorDB (run inside the toolbox container)."""
+"""Needs a running FalkorDB (run inside the toolbox container); skipped when it is unreachable."""
 from core.graph import client
 from core.graph.schema import baseline_name
 
 GRAPH = baseline_name("p21test")
 
 
-def test_create_indexes_twice():
+def test_create_indexes_twice(falkordb):
     client.delete_graph(GRAPH)
     try:
         client.query(GRAPH, "CREATE (:Asset {id: 'user:x'})")  # the graph must exist before indexing

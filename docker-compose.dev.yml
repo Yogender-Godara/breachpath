@@ -6,7 +6,7 @@ services:
   falkordb:
     ports:
       - "127.0.0.1:6379:6379"   # loopback only: for local scripts / the stdio MCP demo
-      - "127.0.0.1:3000:3000"   # FalkorDB browser, loopback only
+      - "127.0.0.1:3300:3000"   # FalkorDB browser, loopback only
 
   # Throwaway Python 3.12 container for spikes, tests and data loading (no host installs needed)
   toolbox:

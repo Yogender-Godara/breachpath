@@ -10,10 +10,8 @@ def test_eight_edge_types_with_full_info():
         assert set(info["from"] + info["to"]) <= set(schema.NODE_LABELS)
 
 
-def test_attack_pattern():
-    assert schema.ATTACK_TYPES == list(schema.EDGE_TYPES)
-    assert schema.ATTACK_PATTERN.split("|") == schema.ATTACK_TYPES
-    assert schema.ATTACK_PATTERN.startswith("MEMBER_OF|CAN_ASSUME|")
+def test_every_edge_is_one_physical_type():
+    assert schema.EDGE_TYPE == "ATTACK" and schema.ATTACK_PATTERN == "ATTACK"
 
 
 def test_name_helpers():
@@ -41,8 +39,8 @@ def test_bad_ids_raise(bad):
 def test_index_queries():
     node = [q for q in schema.INDEX_QUERIES if q.startswith("CREATE INDEX FOR (n:")]
     rel = [q for q in schema.INDEX_QUERIES if "-[r:" in q]
-    assert len(node) == 3 and len(rel) == 8
-    assert len(schema.INDEX_QUERIES) == 11
+    assert len(node) == 3 and rel == ["CREATE INDEX FOR ()-[r:ATTACK]-() ON (r.eid)"]
+    assert len(schema.INDEX_QUERIES) == 4
 
 
 def test_sandbox_suffix_is_validated():

@@ -10,7 +10,7 @@
 ```
 breachpath/
 ├── docker-compose.yml          # falkordb, api, worker, ui   (4 containers; only ui public)
-├── docker-compose.dev.yml      # LOCAL ONLY: api docs :8000, FalkorDB browser :3000, FalkorDB on 127.0.0.1:6379
+├── docker-compose.dev.yml      # LOCAL ONLY: api docs :8000, FalkorDB browser :3300 (container port 3000), FalkorDB on 127.0.0.1:6379
 ├── Dockerfile                  # one image for api/worker/ui (different commands)
 ├── .env.example
 ├── README.md
@@ -20,7 +20,7 @@ breachpath/
 │   └── answer_keys/            # s1.json … s8.json  (ground truth)
 ├── core/                       # THE shared library: imported by api, worker and mcp_server
 │   ├── graph/
-│   │   ├── schema.py           # labels, edge types, ATTACK_TYPES, indexes
+│   │   ├── schema.py           # labels, EDGE_TYPE (:ATTACK), edge kinds, indexes
 │   │   ├── loader.py           # UNWIND batch loader
 │   │   ├── queries.py          # all Cypher strings (parameterized)
 │   │   ├── mincut.py           # residual-graph min-cut + witness paths
@@ -116,19 +116,22 @@ This is what stops a fix from silently breaking access for the other 49 users (c
 
 > The Reporter always uses the **remediation verb**, never "delete edge". Some fixes are host actions, not IAM changes, and the report says so.
 
-`ATTACK_TYPES = [MEMBER_OF, CAN_ASSUME, HAS_POLICY, CAN_READ, CAN_SSH, CAN_PASS_ROLE, STORES_SECRET, AUTHENTICATES_AS]`
+**Storage (decided P3.1):** every edge is stored as one physical relationship type, `:ATTACK`, and the type in the table above is its property `kind` (`EDGE_TYPE = "ATTACK"` in `schema.py`). Why: `algo.maxFlow` accepts exactly one relationship type. The kinds are `MEMBER_OF, CAN_ASSUME, HAS_POLICY, CAN_READ, CAN_SSH, CAN_PASS_ROLE, STORES_SECRET, AUTHENTICATES_AS`. The generated JSON and the answer keys keep calling this field `type`; the loader writes it as `kind`.
 
 **Edge properties:**
 
 | Property | Type | Meaning |
 |---|---|---|
 | `eid` | string, unique | Stable edge id, e.g. `e:0042`. Used everywhere: plans, reports, answer keys. |
+| `kind` | string | The edge type from the table above (e.g. `CAN_PASS_ROLE`). The Reporter's remediation verb comes from it. |
 | `cap` | int | Max-flow capacity. `1` = removable. Set to `PROTECT_CAP` in the sandbox if protected. `PROTECT_CAP` = (number of edges in the graph) + 1, computed per sandbox, so no cut made only of removable edges can ever reach it. |
 | `w` | int | `1`. Weight for `algo.SPpaths` (hop count). |
 | `last_used_days` | int | Days since last use. A **secondary** tie-break when choosing a cut. Collateral comes first (§4.2). |
 | `technique` | string, optional | For escalation edges, e.g. `PassRole+CreateFunction` |
 | `protected` | bool, sandbox only | `true` if the edge is on a business-need path |
 
+> **Rule (P3.4):** at most one edge per `(src, dst)` pair. The loader rejects duplicates (`check_no_parallel_edges`), because `algo.maxFlow` needs a simple adjacency matrix and fails on multi-edges.
+>
 > **Rule (decision D10):** every edge in the graph is an attack edge. Business needs are **nodes without edges**, so whole-graph algorithms (`algo.bfs` with `null` type) stay correct.
 
 ### 2.4 Model picture
@@ -158,19 +161,17 @@ flowchart LR
 CREATE INDEX FOR (n:Asset) ON (n.id)
 CREATE INDEX FOR (n:Database) ON (n.crown_jewel)
 CREATE INDEX FOR (n:BusinessNeed) ON (n.id)
-// one per edge type:
-CREATE INDEX FOR ()-[r:MEMBER_OF]-() ON (r.eid)
-CREATE INDEX FOR ()-[r:CAN_ASSUME]-() ON (r.eid)
-// … same for every type in ATTACK_TYPES
+// one relationship index: every edge is :ATTACK
+CREATE INDEX FOR ()-[r:ATTACK]-() ON (r.eid)
 ```
 
 ---
 
 ## 3. Cypher queries
 
-All queries are **parameterized**. `$types` = `ATTACK_TYPES`. `{T}` below means the literal type list `MEMBER_OF|CAN_ASSUME|…` (types can't be parameters inside a pattern, so they're written into the query string from a constant, never from user input).
+All queries are **parameterized**. Every edge is `:ATTACK` (§2.3), so the algorithm calls pass `['ATTACK']` and patterns say `:ATTACK`. These, the hop bound (`MAX_HOPS`) and the BFS depth are constants written into the query string once in `core/graph/queries.py`, never from user input. The real edge type is `r.kind`.
 
-### Q0: Load (per label and per edge type, in batches)
+### Q0: Load (per label, plus one query for all edges, in batches)
 
 > P1.3 finding: a whole map parameter can't be used as inline properties (`CREATE ()-[:R $p]->()` fails with *"Encountered unhandled type in inlined properties"*). Use explicit fields (`{eid: row.eid, …}`) or `SET r += row.props`.
 
@@ -179,26 +180,26 @@ All queries are **parameterized**. `$types` = `ATTACK_TYPES`. `{T}` below means 
 UNWIND $rows AS row
 CREATE (:Asset:User {id: row.id, name: row.name, user_type: row.user_type, team: row.team})
 
-// edges (one query per type)
+// edges (one query for all kinds; row.type is written as kind)
 UNWIND $rows AS row
 MATCH (a:Asset {id: row.src}), (b:Asset {id: row.dst})
-CREATE (a)-[:MEMBER_OF {eid: row.eid, cap: 1, w: 1,
-                        last_used_days: row.last_used_days, technique: row.technique}]->(b)
+CREATE (a)-[r:ATTACK {eid: row.eid, kind: row.type, cap: 1, w: 1, last_used_days: row.last_used_days}]->(b)
+SET r.technique = row.technique
 ```
 
 ### Q1: Blast radius
 
 ```cypher
-MATCH (s:Asset {id: $src})-[:{T}*1..6]->(t:Database {crown_jewel: true})
+MATCH (s:Asset {id: $src})-[:ATTACK*1..6]->(t:Database {crown_jewel: true})
 RETURN DISTINCT t.id AS id, t.name AS name
 ```
-> A variable-length bound usually can't be a query parameter, so `6` comes from the `MAX_HOPS` config, written into the string. **[VERIFY]**
+> A variable-length bound can't be a query parameter (verified P3.1: `*1..$h` fails with *"Encountered unhandled type in inlined properties"*), so `6` comes from the `MAX_HOPS` config, written into the string.
 > For a **complete** (unbounded) check, use Q9 (`algo.bfs`) instead.
 
 ### Q2: Attack paths, top-K by hops
 
 ```cypher
-MATCH p = (s:Asset {id: $src})-[:{T}*1..6]->(t:Database {crown_jewel: true})
+MATCH p = (s:Asset {id: $src})-[:ATTACK*1..6]->(t:Database {crown_jewel: true})
 RETURN t.id AS target,
        [n IN nodes(p) | n.id]          AS node_ids,
        [r IN relationships(p) | r.eid] AS eids,
@@ -211,7 +212,7 @@ LIMIT $k
 
 ```cypher
 MATCH (s:Asset {id: $src}), (t:Asset {id: $target})
-CALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: $types,
+CALL algo.SPpaths({sourceNode: s, targetNode: t, relTypes: ['ATTACK'],
                    relDirection: 'outgoing', weightProp: 'w',
                    pathCount: $k, maxLen: 8})
 YIELD path, pathWeight
@@ -221,10 +222,10 @@ RETURN [r IN relationships(path) | r.eid] AS eids, pathWeight AS hops
 ### Q4: Edge path frequency (incident-specific choke points)
 
 ```cypher
-MATCH p = (s:Asset {id: $src})-[:{T}*1..6]->(t:Database {crown_jewel: true})
+MATCH p = (s:Asset {id: $src})-[:ATTACK*1..6]->(t:Database {crown_jewel: true})
 WITH p LIMIT $max_paths
 UNWIND relationships(p) AS r
-RETURN r.eid AS eid, type(r) AS type, count(*) AS paths_through
+RETURN r.eid AS eid, r.kind AS kind, count(*) AS paths_through
 ORDER BY paths_through DESC
 LIMIT $top
 ```
@@ -232,7 +233,7 @@ LIMIT $top
 ### Q5: Betweenness (global hint)
 
 ```cypher
-CALL algo.betweenness({relationshipTypes: $types, samplingSize: $n, samplingSeed: 42})
+CALL algo.betweenness({relationshipTypes: ['ATTACK'], samplingSize: $n, samplingSeed: 42})
 YIELD node, score
 RETURN node.id AS id, labels(node) AS labels, score
 ORDER BY score DESC
@@ -247,7 +248,7 @@ MATCH (s:Asset {id: $src})
 MATCH (t:Database {crown_jewel: true})
 WITH s, collect(t) AS targets
 CALL algo.maxFlow({sourceNodes: [s], targetNodes: targets,
-                   relationshipTypes: $types, capacityProperty: 'cap'})
+                   relationshipTypes: ['ATTACK'], capacityProperty: 'cap'})
 YIELD edges, edgeFlows, maxFlow
 RETURN [e IN edges | e.eid] AS flow_eids, edgeFlows, maxFlow
 ```
@@ -255,8 +256,8 @@ RETURN [e IN edges | e.eid] AS flow_eids, edgeFlows, maxFlow
 ### Q7: All attack edges (for the residual graph)
 
 ```cypher
-MATCH (a)-[r:{T}]->(b)
-RETURN r.eid AS eid, a.id AS u, b.id AS v, r.cap AS cap, type(r) AS type,
+MATCH (a)-[r:ATTACK]->(b)
+RETURN r.eid AS eid, a.id AS u, b.id AS v, r.cap AS cap, r.kind AS kind,
        r.last_used_days AS stale_days
 ```
 > v1 loads every edge (about 150 nodes and a few hundred edges). Scale path: only the edges reachable from `$src`.
@@ -265,12 +266,13 @@ RETURN r.eid AS eid, a.id AS u, b.id AS v, r.cap AS cap, type(r) AS type,
 
 ```cypher
 // step 1: PROTECT_CAP = edge count + 1
-MATCH ()-[r]->() RETURN count(r) + 1 AS protect_cap
+MATCH ()-[r:ATTACK]->() RETURN count(r) + 1 AS protect_cap
 
 // step 2: for EVERY valid need (company-wide), protect one shortest path
 MATCH (n:BusinessNeed {valid: true})
+WITH n
 MATCH (a:Asset {id: n.principal_id}), (b:Asset {id: n.resource_id})
-CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: $types,
+CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: ['ATTACK'],
                    relDirection: 'outgoing', weightProp: 'w', pathCount: 1})
 YIELD path
 UNWIND relationships(path) AS r
@@ -283,29 +285,30 @@ RETURN n.id AS need_id, collect(r.eid) AS protected_eids
 
 ```cypher
 MATCH (s:Asset {id: $src})
-CALL algo.bfs(s, $depth, null)
+CALL algo.bfs(s, 50, null)
 YIELD nodes
 RETURN [n IN nodes WHERE n:Database AND n.crown_jewel = true | n.id] AS reached_jewels
 ```
-> `null` = all relationship types. This is correct **only because** every edge is an attack edge (D10). `$depth` = 50 (larger than any real path).
+> `null` = all relationship types. This is correct **only because** every edge is an attack edge (D10). The depth is `BFS_DEPTH = 50` in `queries.py` (larger than any real path), written into the string like the hop bound.
 
 ### Q10: Apply fix (sandbox only, idempotent)
 
 ```cypher
 UNWIND $eids AS eid
-MATCH ()-[r]->()
+MATCH ()-[r:ATTACK]->()
 WHERE r.eid = eid AND coalesce(r.protected, false) = false
 DELETE r
 RETURN count(*) AS deleted
 ```
-> Deleting an edge that's already gone matches nothing, so running it twice is safe. Scale path: group by type to use the per-type `eid` index.
+> Deleting an edge that's already gone matches nothing, so running it twice is safe. `[r:ATTACK]` lets it use the `eid` index.
 
 ### Q11: Business need check (after the fix)
 
 ```cypher
 MATCH (n:BusinessNeed)
+WITH n
 MATCH (a:Asset {id: n.principal_id}), (b:Asset {id: n.resource_id})
-CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: $types,
+CALL algo.SPpaths({sourceNode: a, targetNode: b, relTypes: ['ATTACK'],
                    relDirection: 'outgoing', weightProp: 'w', pathCount: 1})
 YIELD path
 RETURN n.id AS need_id, count(path) > 0 AS ok
@@ -403,6 +406,8 @@ for each protected edge p in P:
         "Split <D> into <D> and <D>-biz. <principal> keeps <D>-biz (only <business edges>).
          Then remove <cut edges>. Verified: maxFlow = 0, all needs ok."
    else → try the next p. If none passes → suggestion = "manual review", proven = false.
+
+NOTE (P3.4): the split never creates a multi-edge. D' is a new node, so the moved incoming edge and the copied outgoing edges all form new (src, dst) pairs.
 
 OUTPUT: {suggestion_type: "rotate_credentials"|"split_node"|"manual", split_node, new_node,
          moved_edges, then_remove, proven: bool}
@@ -647,7 +652,7 @@ The heartbeat is cancelled in `finally`, and the lock is deleted only if it's st
 
 Each scenario graph = **the same background company** (same seed) **+ one planted scenario**. Ground truth is computed **on the final graph** by an independent reference implementation, never from what we meant to plant.
 
-### 10.2 Background company (seed 42: 128 nodes, 165 edges, about 37% recent; verified P2.2)
+### 10.2 Background company (seed 42: 128 nodes, 165 edges, about 45% recent after the P2.4 daily-work step; verified P2.2)
 
 | Type | Count | Rules |
 |---|---|---|
@@ -669,6 +674,7 @@ Each scenario graph = **the same background company** (same seed) **+ one plante
 - Each policy can read (`CAN_READ`) 1–2 non-crown databases, and has a 20% chance of `CAN_SSH` to one server.
 - Each server has a 30% chance of storing a secret (`STORES_SECRET`), which `AUTHENTICATES_AS` a service user.
 - `last_used_days` is uniform from 0 to 400.
+- **Daily work (P2.4):** after all edges exist, each team's first human (`user:{team}-01`) gets one chain `MEMBER_OF → CAN_ASSUME → HAS_POLICY → CAN_READ` (first outgoing edge at each hop) with `last_used_days` uniform 0–30. Random edges make a 4-hop path all-recent only about 2.5% of the time, so without this the background has no usage needs.
 - **Background edges never point at planted nodes.** Planted nodes may link **into** the background only through an explicit `background_links` list in the scenario YAML.
 - **Usage needs (company-wide):** after the final graph is built, the generator creates `:BusinessNeed {source: "usage"}` for every principal → resource pair reachable through edges **all** used within `NEED_USAGE_DAYS` (30). About 40% of background edges are "recent" (`last_used_days` ≤ 30), so there is real access to protect.
 - Each scenario's planted edges set `last_used_days` deliberately, so the scenario controls what counts as needed. The `expect` block (§10.3) then fails loudly if usage needs change the expected cut.

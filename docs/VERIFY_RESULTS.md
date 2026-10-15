@@ -29,7 +29,7 @@ Script: `spikes/verify_falkordb.py` (one toy graph per check). FalkorDB 6.0.2, r
 
 Observations and design impact (vs `docs/03_LLD.md`):
 
-- **B1** `algo.maxFlow` exists, returns 5.0 on the known graph (value is a float). Design impact: none.
+- **B1** `algo.maxFlow` exists, returns 5.0 on the known graph (value is a float). Design impact: none. **Note:** P1.3 tested one relationship type only; `algo.maxFlow` requires exactly one type (found in P3.1), so all edges are stored as `:ATTACK` with the real type in `r.kind`.
 - **B1b** maxFlow respects direction: the only edge D->A gives a row with `maxFlow = 0.0` for A->D. Design impact: none.
 - **B2a** Yielded `edges` carry properties (`e.eid`, `e.cap` work). `edgeFlows` is positionally aligned with `edges` (flow <= cap at every position, flows consistent at each node). Order is NOT the creation order (e1,e2,e5,e3,e4), so map by position, not by eid order. Design impact: none.
 - **B2b** Zero flow (A and D not connected): one row with `maxFlow = 0.0`, not "no row". Design impact: none.
@@ -59,3 +59,23 @@ Run in the toolbox container (same image the worker will use), 2026-10-15. Scrip
 
 - **MCP stdio:** Design impact: none for the architecture (stdio subprocess works). Two details to remember: (1) the SDK name is `MCPServer`, not `FastMCP`, so the docs' "FastMCP" wording is outdated (HLD C4 and §190, LLD line 35, task.md lines 108 and 325) and should be changed in a docs pass; (2) the subprocess gets only a small default environment, so the worker must pass `FALKORDB_HOST`, `FALKORDB_PORT` and `FALKORDB_PASSWORD` explicitly through `StdioServerParameters(env=...)`.
 - **Streamlit:** Design impact: none. The `st.fragment(run_every=...)` live timeline in the LLD works as written.
+
+## P3.1 query checks
+
+Run in the toolbox on S2 (FalkorDB 6.0.2), 2026-10-15. Tests: `tests/test_queries.py`.
+
+| Item | Result |
+|---|---|
+| Q1 hop bound as a `$param` (`*1..$h`) | **fails**: `Encountered unhandled type in inlined properties`. A literal `6` works. Keep the bound formatted from `MAX_HOPS`. |
+| Q8 / Q11: `MATCH (n:BusinessNeed) MATCH (a:Asset {id: n.principal_id})` | **fails**: `Variable n not found`. Fix: `WITH n` between the two MATCH clauses (the same query then works). |
+| Q6 `algo.maxFlow` with several `relationshipTypes` (or none, `[]`, `null`) | **fails**: `'relationshipTypes' is required and must contain exactly one type`. P1.3 only tested one type, so the LLD's 8-type list was never checked. **Decision (option A): every edge is `:ATTACK`, the real type is `r.kind`.** Verified live on S2: `algo.maxFlow` with `['ATTACK']` = 2.0, flow only on the 11 attack-path eids. |
+| Q10 `APPLY_FIX` on a missing or protected edge | returns one row `[[0]]` (not an empty result) |
+| Q2, Q3, Q4, Q5, Q7, Q9, Q12, Q8 step 1 | run as written; sanity values match S2 |
+
+## P3.4 min-cut checks
+
+FalkorDB 6.0.2, 2026-10-15. Tests: `tests/test_mincut.py`.
+
+| Item | Result |
+|---|---|
+| `algo.maxFlow` on a graph with two edges between the same pair under one relationship type | **fails**: `relationship type 'ATTACK' contains multi-edges; maxFlow requires a simple adjacency matrix`. Design impact: at most one edge per `(src, dst)`; the loader rejects duplicates (LLD §2.3). Pinned by `test_falkordb_limit_maxflow_rejects_multi_edges`. |

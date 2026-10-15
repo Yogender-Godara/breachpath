@@ -27,8 +27,8 @@ Hackathon: Graph Hacks (WeMakeDevs × FalkorDB), **Track 1 only**. Solo develope
 - **Cypher:** always parameterized. Edge types and hop bounds come only from constants in `core/graph/schema.py`.
 
 ## Environment
-- Docker Engine runs **inside WSL** (no Docker Desktop). Run docker/compose via WSL: `wsl -e sh -c "cd /mnt/f/Hackthon_Discussion/breachpath && …"`.
-- Repo path: Windows `F:\Hackthon_Discussion\breachpath`, WSL `/mnt/f/Hackthon_Discussion/breachpath`.
+- Docker Engine runs **inside WSL** (no Docker Desktop). Run docker/compose via WSL: `wsl -e sh -c "cd /mnt/d/HACKTHON/breachpath && …"`.
+- Repo path: Windows `D:\HACKTHON\breachpath`, WSL `/mnt/d/HACKTHON/breachpath`.
 - App containers use **Python 3.12**. WSL has 3.14, so use `uv` for a local 3.12 venv.
 - Use `.gitattributes` LF endings. Write files with LF.
 
