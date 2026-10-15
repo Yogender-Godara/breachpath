@@ -9,7 +9,7 @@ from core.graph import client, loader, queries
 from core.graph.mincut import MinCutError
 from core.graph.schema import baseline_name, sandbox_name
 from core.pipeline import run_incident
-from core.tools import write
+from core.tools import verify, write
 from orchestrator.lock import hold_lock
 from orchestrator.state import new_state
 
@@ -105,7 +105,7 @@ def test_s3_identical_candidates_use_one_simulation(falkordb):
 def test_no_risk_user_gets_a_short_report_and_no_sandbox(falkordb):
     loader.load_scenario("s2")
     src = next(u for (u,) in client.ro_query(baseline_name("s2"), "MATCH (u:User) RETURN u.id ORDER BY u.id")
-               if not client.ro_query(baseline_name("s2"), queries.REACH_BFS, {"src": u})[0][0])
+               if not verify.reached_jewels(baseline_name("s2"), u))
     with incident("s2", src) as (state, sink, _):
         assert state["status"] == "DONE_NO_RISK" and state["sandbox_graph"] is None and state["plan"] is None
         assert not [g for g in client.get_db().list_graphs() if f":sbx:{state['id']}" in g]
@@ -133,9 +133,12 @@ def test_any_other_exception_is_failed_with_an_error_event(falkordb, monkeypatch
         assert [e["type"] for e in sink] == ["error"] and state["report"] is None
 
 
-def test_agent_mode_is_not_built_yet():
-    with pytest.raises(NotImplementedError):
-        run_incident(new_state("s2", "user:ravi", "agent"), "agent", lock_token="x")
+def test_agent_mode_swaps_only_the_brains():
+    from agents import brains
+    assert pipeline._brain("agent") is brains and pipeline._brain("fast") is fast_brains
+    assert [hasattr(brains, f) for f in ("investigate", "plan", "report")] == [True] * 3
+    with pytest.raises(ValueError):
+        pipeline._brain("nope")
 
 
 def test_a_failed_tool_stops_the_pipeline(falkordb):

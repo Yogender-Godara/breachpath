@@ -6,6 +6,8 @@
 
 ---
 
+> **Injected arguments (cache follow-up):** the loop fills in `graph`, `sandbox`, `src`, `incident_id` and `lock_token` itself and hides them from the tool schemas, so the prompts never name a graph or sandbox and the messages are identical for every incident of a scenario (the LLM cache hits across incidents).
+
 ## 1. Shared system preamble (all LLM agents)
 
 ```text
@@ -27,14 +29,14 @@ Ground rules:
 
 **System (after the preamble):**
 ```text
-Role: INVESTIGATOR. Input: a compromised identity (src) and the baseline graph name.
+Role: INVESTIGATOR. Input: a compromised identity (src). The graph and src are already set for every tool.
 Goal: find what crown jewels src can reach and the attack paths to them.
 
 Steps:
-1. Call get_blast_radius(graph, src).
+1. Call get_blast_radius().
 2. If nothing is reachable, call submit_findings with empty lists.
-3. Otherwise call find_attack_paths(graph, src, target) for EACH reachable jewel (in parallel if you can).
-4. Optionally call edge_path_frequency(graph, src) to see which edges many paths share.
+3. Otherwise call find_attack_paths(target) for EACH reachable jewel (in parallel if you can).
+4. Optionally call edge_path_frequency() to see which edges many paths share.
 5. Use get_node / get_edge only if you need details to explain something.
 6. Use run_readonly_cypher only if no other tool answers your question.
 7. Call submit_findings. Copy paths exactly as the tools returned them (target + eids).
@@ -68,7 +70,7 @@ Steps:
 ```
 > Only flat lists of strings and simple objects. No maps or counts, which open models often format wrong. `node_ids`, `hops`, path counts and top edges are **added in code** from the tool results (LLD §6.3).
 
-**Post-check (code):** every `eid` must exist in the baseline, and each path must be a real connected chain from src to its target. Invalid paths are dropped and logged. If **all** are invalid → retry once → fall back to the deterministic findings.
+**Post-check (code):** every `eid` must exist in the baseline, and each path must be a real connected chain from src to its target (a crown jewel), without duplicates. Invalid paths are dropped and logged. If jewels are reachable within the hop bound but **all** paths are invalid (or the run degraded) → retry once → fall back to the deterministic findings. **`reachable_jewels` is always the code BFS**; the LLM's list is only compared with it and the difference goes into `notes`.
 
 ---
 
@@ -76,13 +78,13 @@ Steps:
 
 **System (after the preamble):**
 ```text
-Role: PLANNER. Input: Findings, the sandbox graph name (business edges for the WHOLE company
-are already protected), and on a retry: failure_detail + the changes already tried.
+Role: PLANNER. Input: Findings, and on a retry: failure_detail + the changes already tried.
+The sandbox and src are already set for every tool (business edges for the WHOLE company are already protected).
 Goal: choose the fix that blocks every attack path, keeps every business need,
 and hurts the fewest other people.
 
 Steps:
-1. Call compute_min_cut(sandbox, src).
+1. Call compute_min_cut().
 2. If safe=false: call submit_fix_plan with cut_eids=[] and chosen="source_side".
    The code attaches the proven suggestion. Do not invent one.
 3. If safe=true: call simulate_cut for EACH candidate (in parallel if you can).
@@ -117,6 +119,8 @@ Steps:
   }
 }
 ```
+
+**Note (P6.5):** in code the Planner is never called when `safe=false` (or after a failed Planner cut); step 2 stays only as a guard.
 
 **Post-check (code):**
 - The submitted `cut_eids` must match a `simulate_cut` result in this incident with `blocks_attack = true` and `needs_ok = true`. If the Planner never simulated it, code simulates it now. If it fails → use the lowest-collateral code candidate and log `planner_choice_rejected` (LLD §16).
@@ -181,7 +185,7 @@ It is scored by the **networkx** reference (LLD §11).
 | Setting | Investigator | Planner | Reporter | Baseline |
 |---|---|---|---|---|
 | model | `MODEL_INVESTIGATOR_<PROVIDER>` (strong tool calling) | `MODEL_PLANNER_<PROVIDER>` (strong tool calling) | `MODEL_REPORTER_<PROVIDER>` (small/fast OK) | **same model as the Planner** (fair comparison) |
-| provider chain | `LLM_PROVIDERS` (default `groq,openrouter,mistral`) | same | same | same |
+| provider | `LLM_PROVIDERS` (Groq, then OpenRouter; the run restarts on the next) | same | same | same |
 | temperature | 0 | 0 | 0.2 | 0 |
 | max turns | 8 | 8 | 1 | 1 |
 | tools | allow-list (LLD §6.2) + `submit_findings` | allow-list + `submit_fix_plan` | none | none |

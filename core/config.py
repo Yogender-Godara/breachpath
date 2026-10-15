@@ -15,6 +15,13 @@ MAX_SANDBOXES = int(os.getenv("MAX_SANDBOXES", "3"))
 MAX_GRAPHS = int(os.getenv("MAX_GRAPHS", "20"))
 SANDBOX_TTL_HOURS = int(os.getenv("SANDBOX_TTL_HOURS", "24"))
 COLLATERAL_RECENT_DAYS = int(os.getenv("COLLATERAL_RECENT_DAYS", "90"))
+# LLM (the provider key and the model ids are read by agents/llm_gateway.py)
+LLM_PROVIDERS = [p.strip().lower() for p in os.getenv("LLM_PROVIDERS", "groq,openrouter").split(",") if p.strip()]  # the order is the fallback order
+LLM_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "30"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+LLM_MAX_WAIT_S = float(os.getenv("LLM_MAX_WAIT_S", "20"))  # the longest we wait for a 429's retry-after
+LLM_CACHE = os.getenv("LLM_CACHE", "on").strip().lower() in ("on", "true", "1")
+LLM_CACHE_TTL_S = int(os.getenv("LLM_CACHE_TTL_S", str(7 * 24 * 3600)))
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")  # empty = agent mode is disabled
 RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "10"))
 MAX_ACTIVE_AGENT = int(os.getenv("MAX_ACTIVE_AGENT", "2"))

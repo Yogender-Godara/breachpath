@@ -6,12 +6,18 @@ from core.tools import collateral
 from core.tools.common import BadInput, NotFound, tool
 
 
+def reached_jewels(graph, src):
+    """Crown jewels a full BFS from src reaches (Q9). algo.bfs gives NO row when src has no outgoing edge: that means none."""
+    rows = ro_query(graph, queries.REACH_BFS, {"src": src})
+    return sorted(rows[0][0]) if rows else []
+
+
 def attack_status(graph, src):
     """How much attack is left from src: max flow (Q6) and the jewels a full BFS reaches (Q9)."""
     if not ro_query(graph, queries.JEWELS):
         return {"max_flow": 0.0, "reached_jewels": []}
     max_flow = ro_query(graph, queries.MAX_FLOW, {"src": src})[0][2]
-    return {"max_flow": max_flow, "reached_jewels": sorted(ro_query(graph, queries.REACH_BFS, {"src": src})[0][0])}
+    return {"max_flow": max_flow, "reached_jewels": reached_jewels(graph, src)}
 
 
 def needs_status(graph):

@@ -67,6 +67,14 @@ def test_partial_fix_still_reaches_one_jewel(prepared):
     assert verdict["pass"] is False and verdict["bfs_reached_jewels"] == ["db:s2-payments"]
 
 
+def test_source_with_no_outgoing_edge_reaches_nothing(prepared):
+    """Regression (P5.5, S6): algo.bfs returns no row when the source has no outgoing edge; verify crashed with IndexError."""
+    client.query(SBX, "MATCH (:Asset {id: $src})-[r]->() DELETE r", {"src": SRC})
+    verdict = data(verify.verify_fix(SBX, SRC))
+    assert verdict["bfs_reached_jewels"] == [] and verdict["attack_max_flow"] == 0.0
+    assert verify.reached_jewels(SBX, SRC) == []
+
+
 def test_a_broken_need_is_named(prepared):
     fix(["e:s2:05", "e:s2:10"])
     client.query(SBX, "MATCH ()-[r {eid: 'e:s2:09'}]->() DELETE r")  # a bug: a protected edge is gone

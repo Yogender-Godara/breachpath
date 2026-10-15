@@ -19,7 +19,10 @@ from orchestrator.state_machine import InvalidTransition, TERMINAL, advance, aft
 def _brain(mode):
     if mode == "fast":
         return fast_brains
-    raise NotImplementedError(f"mode {mode!r}: the agent brains arrive in P6")  # the seam: same investigate/plan/report
+    if mode == "agent":
+        from agents import brains  # imported here: fast mode (and the API) never imports the agents
+        return brains  # the seam: same investigate/plan/report
+    raise ValueError(f"unknown mode {mode!r}")
 
 
 # --- shared steps: (state, auth) -> (agent, event type, message, data) ---
@@ -98,8 +101,9 @@ def _report(state, brain):
     return "reporter", "report", f"report written ({len(state['report']['markdown'])} chars)", {"status": state["status"]}
 
 
-def run_incident(state, mode, *, lock_token, sink=None):
-    """Run the incident to a final status and return the state. Never raises for a failed step: the status says what happened."""
+def run_incident(state, mode, *, lock_token, sink=None, lock=None):
+    """Run the incident to a final status and return the state. Never raises for a failed step: the status says what happened.
+    lock: the incident's lock handle (agent mode). If its heartbeat lost it between two steps, the run stops with FAILED (LLD section 8)."""
     brain = _brain(mode)
     if mode == "fast" and sink is None:
         sink = []  # fast mode keeps events in memory
@@ -123,6 +127,11 @@ def run_incident(state, mode, *, lock_token, sink=None):
                 if state["report"] is None:
                     started = time.perf_counter()
                     checkpoint(*_report(state, brain), started)
+                break
+            if lock is not None and lock.lost.is_set():  # another holder may own the incident now: stop (writes were guarded anyway)
+                state["failure_detail"] = "lock lost"
+                advance(state, "FAILED")
+                checkpoint("orchestrator", "error", "lock lost", {"status": "FAILED"}, time.perf_counter())
                 break
             started = time.perf_counter()
             checkpoint(*steps[status](), started)

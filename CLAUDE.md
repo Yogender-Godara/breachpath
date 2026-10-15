@@ -23,12 +23,12 @@ Hackathon: Graph Hacks (WeMakeDevs × FalkorDB), **Track 1 only**. Solo develope
 - **4 containers:** falkordb, api, worker, ui. Only `ui` publishes a port. `docker-compose.dev.yml` is local-only.
 - **Min-cut:** `PROTECT_CAP = edge count + 1`. The residual BFS **crosses** protected edges. Never block them (it breaks max-flow = min-cut). Keep the sanity assert.
 - **Retry only when an input changes.** An invariant violation → `NEEDS_HUMAN`, never a blind retry.
-- **LLM:** provider-agnostic, OpenAI-compatible (Groq → OpenRouter → Mistral), **pinned per agent run**, restart the run on the next provider if one fails, response cache, temperature 0, Pydantic validation, minimal LLM output (code enriches it).
+- **LLM:** OpenAI-compatible providers in `LLM_PROVIDERS` order (Groq, then OpenRouter), called directly; an unavailable provider restarts the agent run on the next one (never mid-conversation); one retry per call; response cache; temperature 0; Pydantic validation; minimal LLM output (code enriches it); all unavailable -> degrade to the fast brains (`degraded=true`).
 - **Cypher:** always parameterized. Edge types and hop bounds come only from constants in `core/graph/schema.py`.
 
 ## Environment
-- Docker Engine runs **inside WSL** (no Docker Desktop). Run docker/compose via WSL: `wsl -e sh -c "cd /mnt/d/HACKTHON/breachpath && …"`.
-- Repo path: Windows `D:\HACKTHON\breachpath`, WSL `/mnt/d/HACKTHON/breachpath`.
+- Docker Engine runs **inside WSL** (no Docker Desktop). Run docker/compose via WSL: `wsl -e sh -c "cd /mnt/f/Hackthon_Discussion/breachpath && …"`.
+- Repo path: Windows `F:\Hackthon_Discussion\breachpath`, WSL `/mnt/f/Hackthon_Discussion/breachpath`.
 - App containers use **Python 3.12**. WSL has 3.14, so use `uv` for a local 3.12 venv.
 - Use `.gitattributes` LF endings. Write files with LF.
 

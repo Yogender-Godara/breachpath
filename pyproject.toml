@@ -8,3 +8,4 @@ requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["live: calls a real LLM provider (needs its API key); deselect with -m 'not live'"]

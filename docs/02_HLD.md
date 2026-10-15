@@ -137,22 +137,23 @@ stateDiagram-v2
     REPORT --> [*]
 ```
 
-### 5.3 LLM layer: provider-agnostic (decision D14)
+### 5.3 LLM layer: Groq then OpenRouter, called directly (decision D14)
 
-**Providers:** Groq, OpenRouter and Mistral. All three offer an **OpenAI-compatible Chat Completions API with tool calling**, so one small `LLMGateway` (the `openai` Python SDK with a different `base_url` + key per provider) talks to all of them. Any other OpenAI-compatible provider can be added through config alone.
+**Providers:** `LLM_PROVIDERS=groq,openrouter` (the order is the fallback order; a provider without a key or model is skipped). Both offer an OpenAI-compatible Chat Completions API with tool calling, so one small `LLMGateway` (the `openai` Python SDK, `base_url` + key per provider) calls them **directly**. Groq is first (about 0.7 s per call, 1000 requests/day); OpenRouter is second (about 4 s, 50 free requests/day; it has its own Activity log, our calls carry `X-Title: BreachPath`). The per-incident trace is our own event stream (LLD §8). No new container.
 
 | Setting | Value | Why |
 |---|---|---|
-| Provider chain | `LLM_PROVIDERS=groq,openrouter,mistral` (order set in config) | Each **agent run is pinned to one provider**. On 429/5xx/timeout, the agent run **restarts on the next provider** with a fresh conversation (never mid-conversation, since tool-call formats differ; D18). Free tiers have rate limits, so the chain keeps runs alive. |
-| Model per agent per provider | Config (`MODEL_<AGENT>_<PROVIDER>`). **Chosen at kickoff by a tool-calling smoke test** (B8). | Model lists and free tiers change. Pick what actually works on Oct 15. |
+| Provider chain | `LLM_PROVIDERS` in order. An agent run is **pinned** to one provider. If it is unavailable (after the one retry, or 401/403/404), the **whole run restarts on the next provider** with a fresh conversation (never mid-conversation, D18). All unavailable → `LLMUnavailable` → the agent loop **degrades to the fast brains** (`degraded: true`, AC-6). | Free quotas are small; Groq is fast, OpenRouter is the backup. |
+| Observability | OpenRouter's Activity log + our incident events (LLD §8) | The per-incident trace is our own events: agent, tool, latency, provider, model |
+| Model per agent per provider | Config (`MODEL_<AGENT>_<PROVIDER>`). **Chosen by a tool-calling smoke test** (B8, VERIFY_RESULTS P1.4). | Model lists and free tiers change. Pick what actually works. |
 | Model selection criteria | Reliable tool calling · context ≥ 32k · low latency · free or cheap | The Investigator and Planner need good tool use. The Reporter can be a smaller model. |
 | Temperature | `0` | Repeatable runs for eval and demo |
 | Tool choice | `auto` in the loop. On the **last allowed turn**, force the `submit_*` function if the provider supports it. Otherwise rely on the prompt + validation. | Not every provider or model supports forced tool choice the same way |
 | Output validation | **Pydantic validation in our code** (don't rely on provider "strict" modes) + one retry with the error message | Works the same with every provider |
 | Parallel tool calls | Used when the model returns several calls. Otherwise run them one by one. | Varies by model |
 | Streaming | Off in v1 | Events are emitted per tool call anyway. Simpler code. |
-| Timeout / retries | 30 s per call, 1 retry per provider, then the next provider | Low tail latency |
-| **Response cache** | Record/replay keyed by `hash(provider, model, messages, tools)`, stored in Redis | Re-running the eval or demo doesn't burn free-tier quota, and the demo is repeatable |
+| Timeout / retries | 30 s per call, **1 retry** (the SDK's own retries are off), then `LLMUnavailable` | Low tail latency |
+| **Response cache** | Record/replay keyed by `hash(provider, model, messages, tools, ...)` (not the trace id), stored in Redis | Re-running the eval or demo doesn't burn free-tier quota, and the demo is repeatable |
 
 > **Correctness doesn't depend on model quality.** Smaller open models invent tool arguments more often. Our Executor validation, code Verifier and fast-mode fallback mean a weak model can make the *narrative* worse, but never makes the *fix or proof* wrong. This is a strong README point.
 
@@ -188,7 +189,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | Queue / state | **Redis Streams + hashes in the same FalkorDB instance** | No extra service |
 | API | FastAPI + Uvicorn | Async, fast, auto docs at `/docs` |
 | MCP | Official MCP Python SDK 2.x (`mcp.server.mcpserver.MCPServer`; FastMCP no longer exists in 2.x), **stdio** transport | Standard. No port to secure. The same server works for external MCP clients on a laptop. |
-| LLM | `openai` Python SDK against OpenAI-compatible endpoints (Groq, OpenRouter, Mistral) + our `LLMGateway` (fallback chain, cache) | One code path for all providers. Easy to explain. *Alternative if a provider has quirks: LiteLLM.* |
+| LLM | `openai` Python SDK against OpenAI-compatible providers (Groq, then OpenRouter, called directly) + our `LLMGateway` (one retry, cache); fallback = restart the run on the next provider | One code path. Easy to explain. |
 | UI | Streamlit + a graph component (e.g. `streamlit-agraph` or `pyvis`) **[VERIFY pick on Day 3]** | Fastest way to build a usable UI in Python |
 | Packaging | Docker Compose | One-command run |
 | Tests | pytest | Simple |
@@ -206,7 +207,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | Algorithm scope | `relationshipTypes` filter on every `algo.*` call, so only attack edges are processed |
 | Fast path | Fast mode (no LLM) for an instant answer. The agent narrative streams in afterwards. |
 | LLM turns | Few, focused agents, with a max-turn cap per agent. Parallel tool calls when the model supports them. |
-| LLM speed | **Groq first** in the chain for its fast inference. Small `max_tokens`. Short prompts that send only the needed state slice. |
+| LLM speed | **Groq first** for its fast inference. Small `max_tokens`. Short prompts that send only the needed state slice. |
 | LLM repeats | Response cache (record/replay), so a repeated eval or demo run returns instantly |
 | API | Returns `202` at once. The UI long-polls events (Redis `XREAD BLOCK`), which gives updates in under 1 s with no websockets. |
 | Sandbox | `GRAPH.COPY` of a 150-node graph is tiny. At large scale, use the overlay approach in §9. |
@@ -237,7 +238,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | Service crash | Docker `restart: unless-stopped` + `/healthz`. Stateless services restart in seconds. |
 | Worker crash mid-incident | State checkpointed after **every agent step**. The job stays pending in the Redis consumer group, and another worker claims it and **resumes from the last step**. |
 | Duplicate jobs | `Idempotency-Key` on `POST /incidents`. Sandbox name = incident id. `apply_fix` is idempotent (deleting a missing edge is a no-op). |
-| LLM outage, rate limit or refusal | Retry → **next provider in the chain** → **degrade to fast mode** + template report. The incident still finishes, marked `degraded: true`. |
+| LLM outage, rate limit or refusal | One retry → **restart the agent run on the next provider** → **degrade to fast mode** + template report. The incident still finishes, marked `degraded: true`. |
 | Bad LLM output | Strict tool schemas + JSON validation of each handoff. One retry with the error, then fall back to the deterministic result. |
 | Hallucinated fix | Executor checks that every `eid` exists and isn't protected. Verifier proves the result. A wrong fix can't be reported as success. |
 | Long or slow queries | Per-query timeout **[VERIFY FalkorDB TIMEOUT config]** + hop bounds + `LIMIT` |
@@ -343,12 +344,12 @@ flowchart TB
 | D12 | MCP exposure | **stdio only** (Option A, §11.1): no listener at all | HTTP container with internal token; public read-only; scoped tokens; OAuth | Safest and simplest. The external-client demo runs its own stdio copy. |
 | D19 | MCP placement | Thin MCP server over a shared **`core` library**, started by the worker as a **stdio subprocess** | Separate MCP container over HTTP | One fewer container, nothing to secure. Agents still truly use MCP (Track 1). |
 | D20 | Orchestration code | **One pipeline `run_incident(mode)`** for both fast and agent mode | Separate fast-mode route + worker state machine | Logic is written once and can't drift between modes |
-| D14 | LLM provider | **Provider-agnostic gateway** over OpenAI-compatible APIs: Groq → OpenRouter → Mistral chain + response cache | One vendor SDK; LiteLLM | You already use these providers. The chain beats free-tier rate limits. It's thin code you can explain. LiteLLM is the backup if quirks appear. |
+| D14 | LLM providers | **Groq then OpenRouter** (`LLM_PROVIDERS`), OpenAI-compatible, called directly, + response cache. *History: chain of three → one provider (a hosted trace gateway was tried and dropped: no account) → two providers again because the free quotas are small.* | One provider; LiteLLM; a hosted gateway | OpenRouter free is 50 requests/day; Groq is faster with 1000/day. Thin code you can explain. |
 | D13 | "No safe fix" suggestion | **Deterministic split simulation** (Role/Policy/Group only), proven in a 2nd sandbox (LLD §4.1). The LLM only words it. | LLM-only suggestion | Keeps "prove, don't claim" true even for the suggestion |
 | D15 | Choosing among equal-size cuts | **LLM Planner** picks by **collateral** (Q12 simulation) → size → staleness, and may propose its own cut if `simulate_cut` verifies it | Fixed rule "prefer stale"; always source-side | Stale-first favours edges next to the DB (most collateral). This is also where the LLM makes a real decision. |
 | D16 | Retry on verification failure | Retry **only when an input changes**. Otherwise `NEEDS_HUMAN`. | Blind retry ×3 | Deterministic code on the same input repeats the same result |
 | D17 | Justifying cut edges | **Witness path per cut edge** from the flow itself | Point to Investigator path indices | Cut edges can sit on paths that aren't listed (> 6 hops or beyond top-K) |
-| D18 | Provider failover | Pin a provider per agent run. On failure, restart that agent's short conversation on the next provider. | Switch mid-conversation | Tool-call ids and formats differ between providers |
+| D18 | Provider fallback | Pin a provider per agent run. If it is unavailable, **restart that agent's run (fresh conversation) on the next provider**. All unavailable → degrade to the fast brains. | Switch mid-conversation | Tool-call ids and formats differ between providers |
 
 ---
 

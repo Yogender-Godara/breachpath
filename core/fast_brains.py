@@ -7,21 +7,31 @@ from core import config
 from core.graph import queries
 from core.graph.client import ro_query
 from core.graph.schema import EDGE_TYPES
-from core.tools import read, split, write
+from core.tools import read, split, verify, write
 from core.tools.common import unwrap
 
 
 # --- Investigate (reads the baseline) ---
 
+def code_facts(graph, src):
+    """What the code decides, shared by the fast and the agent Investigator: the BFS jewels (unbounded: finds 8-hop paths too),
+    the jewels only reachable beyond MAX_HOPS, and the edges most paths share."""
+    jewels = verify.reached_jewels(graph, src)
+    if not jewels:
+        return {"reachable_jewels": [], "beyond_hops_jewels": [], "top_edges": []}
+    within_hops = {j["id"] for j in unwrap(read.get_blast_radius(graph, src))}
+    return {"reachable_jewels": jewels, "beyond_hops_jewels": sorted(set(jewels) - within_hops),
+            "top_edges": unwrap(read.edge_path_frequency(graph, src, top=10))}
+
+
 def investigate(state):
     graph, src = state["baseline_graph"], state["src"]
-    jewels = sorted(ro_query(graph, queries.REACH_BFS, {"src": src})[0][0])  # unbounded: finds 8-hop paths too
+    facts = code_facts(graph, src)
+    jewels, beyond = facts["reachable_jewels"], facts["beyond_hops_jewels"]
     if not jewels:
         return {"reachable_jewels": [], "paths": [], "truncated": False, "notes": f"{src} reaches no crown jewel.",
                 "path_count_by_target": {}, "top_edges": [], "beyond_hops_jewels": []}
     found = unwrap(read.find_attack_paths(graph, src, k=config.TOP_K_PATHS))
-    within_hops = {j["id"] for j in unwrap(read.get_blast_radius(graph, src))}
-    beyond = sorted(set(jewels) - within_hops)
     counts = {}
     for p in found["paths"]:
         counts[p["target"]] = counts.get(p["target"], 0) + 1
@@ -29,8 +39,7 @@ def investigate(state):
     if beyond:
         notes += f" {', '.join(beyond)} only reachable by a path longer than {config.MAX_HOPS} hops: the min-cut still covers it."
     return {"reachable_jewels": jewels, "paths": found["paths"], "truncated": found["truncated"], "notes": notes,
-            "path_count_by_target": counts, "top_edges": unwrap(read.edge_path_frequency(graph, src, top=10)),
-            "beyond_hops_jewels": beyond}
+            "path_count_by_target": counts, "top_edges": facts["top_edges"], "beyond_hops_jewels": beyond}
 
 
 # --- Plan (reads and simulates on the prepared sandbox) ---
@@ -38,10 +47,12 @@ def investigate(state):
 def _reason(info, eid, witness):
     u, v, kind = info[eid]
     host = " [host action]" if EDGE_TYPES[kind].get("host_action") else ""
-    return {"eid": eid, "why": f"{EDGE_TYPES[kind]['remediation']}: {u} → {v}{host}; on every attack path, e.g. {', '.join(witness[eid])}"}
+    on_paths = f"; on every attack path, e.g. {', '.join(witness[eid])}" if witness.get(eid) else ""  # a custom cut edge has no witness
+    return {"eid": eid, "why": f"{EDGE_TYPES[kind]['remediation']}: {u} → {v}{host}{on_paths}"}
 
 
-def plan(state, *, lock_token):
+def plan(state, *, lock_token, known_sims=None):
+    """known_sims = {tuple(sorted(eids)): simulate_cut data} already seen in this incident: never simulated twice (6 per incident)."""
     sandbox, src = state["sandbox_graph"], state["src"]
     auth = {"incident_id": state["id"], "lock_token": lock_token}
     cut = unwrap(read.compute_min_cut(sandbox, src))  # MinCutError is not caught here: the pipeline turns it into NEEDS_HUMAN
@@ -54,12 +65,16 @@ def plan(state, *, lock_token):
         return base
 
     info = {r[0]: (r[1], r[2], r[4]) for r in ro_query(sandbox, queries.ALL_EDGES)}
+    known = known_sims or {}
+    excluded = {tuple(sorted(ch["exclude"])) for ch in state["tried_changes"] if ch["type"] == "use_code_candidate"}  # failed Planner cuts
+    options = [c for c in cut["candidates"] if tuple(sorted(c["eids"])) not in excluded] or cut["candidates"]
     candidates, seen = [], set()
-    for c in cut["candidates"]:
-        if tuple(c["eids"]) in seen:  # e.g. S3: both sides are the same edge, so one simulation is enough
+    for c in options:
+        key_ = tuple(sorted(c["eids"]))
+        if key_ in seen:  # e.g. S3: both sides are the same edge, so one simulation is enough
             continue
-        seen.add(tuple(c["eids"]))
-        sim = unwrap(write.simulate_cut(sandbox, src, c["eids"], **auth))
+        seen.add(key_)
+        sim = known[key_] if key_ in known else unwrap(write.simulate_cut(sandbox, src, c["eids"], **auth))
         hosts = sum(bool(EDGE_TYPES[info[e][2]].get("host_action")) for e in c["eids"])
         # collateral first, then size, then staleness (older is better), then IAM changes over host actions (LLD 4.2)
         key = (not (sim["blocks_attack"] and sim["needs_ok"]), sim["collateral"]["weighted"], sim["size"],

@@ -36,7 +36,7 @@ breachpath/
 │   └── server.py               # thin MCPServer (mcp 2.x) wrapper over core.tools, stdio transport only
 ├── agents/
 │   ├── base.py                 # LLM tool-use loop (MCP client → OpenAI-format tools)
-│   ├── llm_gateway.py          # provider chain (Groq/OpenRouter/Mistral), retries, response cache
+│   ├── llm_gateway.py          # one provider (direct), one retry, response cache
 │   ├── investigator.py
 │   ├── planner.py
 │   ├── executor.py             # code-only
@@ -291,6 +291,7 @@ YIELD nodes
 RETURN [n IN nodes WHERE n:Database AND n.crown_jewel = true | n.id] AS reached_jewels
 ```
 > `null` = all relationship types. This is correct **only because** every edge is an attack edge (D10). The depth is `BFS_DEPTH = 50` in `queries.py` (larger than any real path), written into the string like the hop bound.
+> **Verified P5.5:** `algo.bfs` returns **no row** when the source has no outgoing edge. No row = no jewel reached, so code reads it as `[]` (`verify.reached_jewels`). Q12 has the same behaviour: a user left with no outgoing edge is simply missing from its result, and collateral counts all of that user's access as lost.
 
 ### Q10: Apply fix (sandbox only, idempotent)
 
@@ -472,9 +473,9 @@ tools = mcp.list_tools() filtered by the agent's ALLOW_LIST → OpenAI format  +
 messages = [{role: system, ...}, {role: user, content: task + state slice}]
 for turn in 1..MAX_TURNS:
     tool_choice = "auto", or (last turn AND provider supports it) force submit_<output>
-    resp = gateway.chat(provider, agent, messages, tools, tool_choice, temperature=0)
-         # cache hit? → return | call the PINNED provider (1 retry) → failure raises ProviderFailed
-    msg = resp.choices[0].message ; append msg to messages
+    res = gateway.chat(agent, messages, tools, tool_choice, temperature=0)   # an LLMResult (agents/llm_gateway.py)
+         # cache hit? → return | call the provider (1 retry) → failure raises LLMUnavailable
+    msg = res.message ; append msg to messages
     if msg.tool_calls:
         parse each call's arguments with json.loads (bad JSON → tool error result, not a crash)
         run the MCP calls (in parallel if several) → append one {role: "tool", tool_call_id, content} per call
@@ -485,7 +486,24 @@ for turn in 1..MAX_TURNS:
 on LLMUnavailable, MAX_TURNS, or invalid output twice → deterministic fallback result (fast-mode data), degraded=true
 ```
 
-**Provider switching happens only at agent start (critique fix #6).** Each agent run is **pinned** to one provider. Tool-call ids and message formats differ between providers, so a transcript is never moved mid-conversation. On `ProviderFailed`, the **whole agent run restarts** with a fresh conversation on the next provider in `LLM_PROVIDERS`. Runs are short (≤ 8 turns) and tool results are deterministic, so a restart costs little. When every provider has failed → `LLMUnavailable`.
+**Loop details (P6.3, `agents/base.py`):**
+- `AgentSpec` (name, system, allow_list, submit, output_model, max_turns, temperature) → `run_agent(session, spec, task, auth=, emit=)` → `AgentResult` (output | `degraded` + `reason`, turns, llm_calls, tokens). It never calls the fast brains: the caller (P6.4+) falls back when `degraded`.
+- **Injected params (P6.3, generalised in the cache follow-up):** `run_agent(..., inject={...})` is a dict of values the loop puts into every tool call that HAS that parameter (e.g. `graph`, `sandbox`, `src`, `incident_id`, `lock_token`). Every injected param is removed from the LLM's schema (properties and required), the model never sees or writes it, and an injected value always overwrites what the model sends. `incident_id` and `lock_token` are ALWAYS hidden: a tool that needs them while `inject` lacks them is a bug (ValueError). The Investigator injects `{graph: baseline, src}`; the Planner `{graph: sandbox, sandbox, src, incident_id, lock_token}`. **Why:** the task text and tool calls then contain no graph, sandbox or incident name, so the messages (and the LLM cache key) are the same for every incident of a scenario: a new incident is served from the cache, and the model has fewer arguments to get wrong.
+- **Argument check:** the model's arguments are validated with `jsonschema` against the tool's (stripped) input schema before the call, because the MCP SDK reports bad arguments as `is_error` just like a crash. A bad call is an `error: ...` tool message the model can fix. What remains as `is_error` is a crash inside a tool → `ToolCrashed` (the pipeline turns a `MinCutError` into NEEDS_HUMAN, never a retry).
+- Tool results are re-serialised **compact and key-sorted** (`separators=(',', ':')`, `sort_keys=True`; non-JSON text is left as it is) and then cut at 6000 characters (`...(truncated)`). Fewer tokens, and the same text every time. Messages are plain JSON so the gateway cache key works. `asyncio.gather` runs parallel tool calls on the one session (verified: works). The last turn forces the submit tool (the gateway downgrades it if the provider can't).
+- Events: one `step` per LLM turn and one `tool_call` per tool call (data: tool, ok, provider, model, cached). No key or prompt in an event.
+- anyio wraps an exception that leaves `async with open_session()` in an ExceptionGroup: the caller (worker, P6.6) must catch `run_agent`'s exceptions inside the session.
+- **Enrichment rule (P6.4/P6.5):** an agent brain must return EXACTLY the same dict keys as `core/fast_brains.py`; the LLM output (`agents/schemas.py`) is minimal and each agent's post-check adds the rest from tool results.
+
+**Gateway (P6.2, `agents/llm_gateway.py`):** providers from `LLM_PROVIDERS`, called directly with the `openai` SDK (`<NAME>_BASE_URL`, `<NAME>_API_KEY`; for OpenRouter the header `X-Title: BreachPath` groups our calls in its Activity log). `providers_for(agent)` = the providers that have a key, a base URL and a model for that agent (skipped ones are logged). `chat(agent, provider, ...)` calls the provider the caller passes. The SDK's own retries are off (`max_retries=0`): the gateway does the one retry. The cache stores the response as plain JSON and reads it back unvalidated (Groq sends a `service_tier` value the SDK's literal rejects).
+- **Transient** (429, 5xx, 408, timeout, connection error, and a **200 with no `choices`**, which OpenRouter returns for an overloaded model): one retry after 1.5 s (a **429 waits for its `retry-after` header**, capped at `LLM_MAX_WAIT_S` = 20 s: Groq's 8000 tokens/minute limit makes back-to-back agents hit it), then `LLMUnavailable`.
+- **Fail at once, no retry** (`LLMUnavailable`): 401, 403 (e.g. a model blocked by the provider's project allow-list), 404 (model not found).
+- **Not configured** (no `<NAME>_API_KEY`, `<NAME>_BASE_URL` or `MODEL_<AGENT>_<NAME>`): `LLMUnavailable` naming what to set.
+- **Any other 4xx** (400/422): our request is wrong, so it is raised as-is. It is a bug, never a degrade.
+- A forced `tool_choice` (dict) or `response_format` is downgraded/dropped when the provider's capability flags (`CAPS`, from VERIFY_RESULTS P1.4) say it is unsupported. Unknown providers get all flags `False`.
+- Cache key: `llmcache:` + sha256 of `[provider, model, messages, tools, tool_choice, temperature, response_format]` (effective values, after the downgrade). Only successful responses are cached. A Redis error never stops a call.
+
+**Provider fallback lives in the loop (D18, P6.3 follow-up).** `run_agent` tries `providers_for(agent)` in order. An attempt that ends with `LLMUnavailable` (after the one retry, or at once for 401/403/404) is abandoned and the **whole run restarts on the next provider with a fresh message list** (an event says `provider <p> unavailable: <reason>, restarting on <next>`). Any other ending is final, with no restart: a valid submit, invalid output twice, max turns, `ToolCrashed`. `llm_calls` and tokens add up across attempts; `AgentResult.provider` is the provider that produced the result. No provider configured, or all unavailable → `degraded=True` with every reason, and the caller falls back to the fast brains (AC-6).
 
 ### 6.2 Agent specs
 
@@ -496,6 +514,10 @@ on LLMUnavailable, MAX_TURNS, or invalid output twice → deterministic fallback
 | Reporter | — (state given in the prompt) | 1 | smaller or faster model is fine | Markdown text |
 | Executor | code: `create_sandbox`, `protect_business_paths`, `apply_fix` | — | — | `ActionResult` |
 | Verifier | code: `verify_fix` | — | — | `Verdict` |
+
+**Investigator (P6.4, `agents/investigator.py`):** the LLM finds the paths; the **code decides**. `reachable_jewels` is the code BFS (`fast_brains.code_facts`, shared with the fast Investigator), because the pipeline picks `DONE_NO_RISK` from it; the LLM's own list is only compared (`LLM missed: ...` / `LLM listed jewels the BFS does not reach: ...` in `notes`). Post-check with one `ALL_EDGES` query: a path is valid only if every eid exists, the edges form a connected chain, it starts at `src`, ends at its `target`, the target is a crown jewel, and it is not a duplicate; each drop is a `finding` event. If the run degraded, or jewels are reachable within `MAX_HOPS` but no valid path remains, it retries **once** (the reasons are added to the task); still nothing → `fast_brains.investigate` and `degraded=True`. No jewel within `MAX_HOPS` (S7): zero paths is correct, no retry. The result has exactly the keys of `fast_brains.investigate` (`reachable_jewels`, `paths` as `{target, node_ids, eids, hops}`, `truncated`, `notes`, `path_count_by_target`, `top_edges`, `beyond_hops_jewels`). The summary `finding` event carries `llm_jewels`, `code_jewels`, `valid_paths`, `dropped_paths`, `provider`, `turns`, `llm_calls` for the eval (P8).
+
+**Planner (P6.5, `agents/planner.py`):** the LLM chooses among SIMULATED cuts, the code verifies. (1) The code computes the min-cut; **not safe → no LLM call at all** (the split suggestion is proven in code), and likewise after a failed Planner cut (`use_code_candidate` in `tried_changes`): `fast_brains.plan` runs, which never chooses an excluded cut. (2) Safe → `run_agent` with `compute_min_cut`, `simulate_cut`, `edge_path_frequency`, `choke_points`, `get_edge`. Every successful `simulate_cut` is captured (`on_tool_result`) in `sims[tuple(sorted(eids))]`, and a repeated `simulate_cut` for a set already seen is answered from `sims`: **no set is simulated twice** (6 per incident; also across a provider restart). (3) A cut is **accepted only if** its simulation says `blocks_attack` and `needs_ok` and it has no protected or missing edge; a cut the LLM never simulated is simulated once in code. After acceptance the **code sets the label**: `chosen` is the name of the min-cut candidate whose eids equal the cut, else `custom` (the LLM's own label goes into the `plan` event as `llm_chosen`). Otherwise (also an empty cut when safe) a `planner_choice_rejected` event says why and `fast_brains.plan(known_sims=sims)` decides (`source: "code"`). A degraded run → the same fallback with `degraded=True`. (4) An accepted plan is enriched in code with exactly the keys of `fast_brains.plan` (`reasons` = the code remediation text + `Planner: <why>`, `witness` from the min-cut candidates, `simulation`, `notes` + `size N vs minimum M`). One `plan` event: `chosen`, `cut_eids`, `source`, `llm_choice`, `accepted`, `collateral`, `sims_used`, `provider`, `turns`.
 
 ### 6.3 Output schemas (`agents/schemas.py`)
 
@@ -807,12 +829,14 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | Var | Default | Meaning |
 |---|---|---|
 | `FALKORDB_HOST` / `FALKORDB_PORT` / `FALKORDB_PASSWORD` | `falkordb` / `6379` / — | DB connection |
-| `LLM_PROVIDERS` | `groq,openrouter,mistral` | Fallback order |
-| `GROQ_API_KEY` / `OPENROUTER_API_KEY` / `MISTRAL_API_KEY` | — | A provider with no key is skipped |
-| `GROQ_BASE_URL` / `OPENROUTER_BASE_URL` / `MISTRAL_BASE_URL` | each provider's OpenAI-compatible URL **[VERIFY at kickoff]** | |
-| `MODEL_<AGENT>_<PROVIDER>` e.g. `MODEL_PLANNER_GROQ` | chosen at kickoff (smoke test) | Model per agent per provider |
+| `LLM_PROVIDERS` | `groq,openrouter` | Providers in fallback order, called directly. A provider without a key or model is skipped |
+| `GROQ_API_KEY` / `OPENROUTER_API_KEY` | — | Each provider's key. No usable provider = agent mode runs degraded |
+| `OPENROUTER_BASE_URL` / `GROQ_BASE_URL` | the provider's URL (defaults built in) | Used by the gateway and `spikes/llm_smoke.py` |
+| `MODEL_<AGENT>_<PROVIDER>` e.g. `MODEL_PLANNER_OPENROUTER` | chosen at kickoff (smoke test) | Model per agent for the active provider |
 | `LLM_TIMEOUT_S` / `LLM_MAX_TOKENS` | `30` / `2000` | Per call |
-| `LLM_CACHE` | `on` | Record/replay cache in Redis (`llmcache:{hash}`, 7 days) |
+| `LLM_MAX_WAIT_S` | `20` | The longest we wait for a 429's `retry-after` before the one retry |
+| `LLM_CACHE` | `on` | Record/replay cache in Redis (`llmcache:{hash}`) |
+| `LLM_CACHE_TTL_S` | `604800` (7 days) | Cache entry lifetime |
 | `MAX_HOPS` | `6` | Display bound for path listing |
 | `TOP_K_PATHS` | `20` | Paths returned |
 | *(no `PROTECT_CAP` setting)* | computed: edge count + 1 | Capacity of protected edges, per sandbox (§2.3) |
@@ -839,8 +863,9 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 |---|---|---|
 | FalkorDB down | MCP / API | `/readyz` = 503. Tools return `DB_UNAVAILABLE`. Jobs stay queued and retry with backoff. |
 | Query timeout | MCP | Return `TIMEOUT`. The agent may narrow the query. Fast mode reduces `k` and hops. |
-| LLM 429/5xx/network | Agent loop | SDK retries (2) → our retry (1, backoff) → degrade to the deterministic result |
-| LLM refusal or empty answer | Agent loop | Next provider in the chain → degrade |
+| LLM 429/5xx/network/200 without choices | Gateway + agent loop | SDK retries off → gateway retry (1, 1.5 s backoff) → `LLMUnavailable` → restart the run on the next provider → all unavailable → degrade to the deterministic result (`degraded=true`) |
+| LLM 401/403/404 (auth, blocked or unknown model), or a provider not configured | Gateway | `LLMUnavailable` at once, no retry → next provider → degrade |
+| LLM refusal or empty answer | Agent loop | Degrade |
 | Tool-call arguments are bad JSON | Agent loop | Return a tool error message to the model (`"invalid JSON: …"`). Counts as a turn. |
 | Invalid agent output | Agent loop | One retry with the validation error → degrade |
 | Plan names a protected or missing eid | Executor | Reject → Planner retry with the reason |
@@ -908,4 +933,4 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | maxFlow returns floats | Compare with `EPS = 1e-6` |
 | Parallel edges between the same two nodes | Fine: every edge has its own `eid`. The residual graph is keyed by edge, not by node pair. |
 | The Planner submits a custom cut | Accepted **only if** a `simulate_cut` call in this incident returned `blocks_attack = true` and `needs_ok = true` for exactly those eids. The report shows `size − minimum`. Otherwise it's rejected → the lowest-collateral **code candidate** is used, logged `planner_choice_rejected`. |
-| Planner submits without simulating | Code runs `simulate_cut` on the submitted cut. If it fails → fallback as above. |
+| Planner submits without simulating | Code runs `simulate_cut` on the submitted cut once. If it fails (or the cut has protected or missing edges) → fallback as above. When `safe = false` or after a failed Planner cut, the LLM is not called at all. |

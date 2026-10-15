@@ -18,19 +18,19 @@
 | Phase | Day | Status | Done / Total |
 |---|---|---|---|
 | P0 Pre-kickoff prep | Oct 14 | 🟨 | 4 / 12 |
-| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 25 / 32 |
+| P1 Kickoff checks (blockers B1–B9) | Day 1 | 🟨 | 30 / 32 |
 | P2 Data and graph | Day 1 | 🟨 | 25 / 28 |
 | P3 Queries and min-cut | Day 1 | 🟨 | 19 / 22 |
 | P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
-| P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 14 / 17 |
-| P6 MCP server and agents (agent mode) | Day 2 | ⬜ | 0 / 20 |
+| P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 15 / 17 |
+| P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 14 / 20 |
 | P7 Reporter and UI | Day 3 | ⬜ | 0 / 12 |
 | P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **113 / 203** |
+| **Total** | | | **133 / 203** |
 
-**Now working on:** P5.5 Fast mode on all scenarios + review ④⑤
+**Now working on:** P6.6 Agent-mode pipeline and worker
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -95,12 +95,12 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** every B1–B7 result is recorded and the design is adjusted where needed.
 
-### P1.4 LLM provider smoke test (B8) ⬜ 🤖 + 👤
-- [ ] 👤 Put the keys in the local `.env`
-- [ ] Script `spikes/llm_smoke.py`: for each provider, 1 tool call, 2 parallel tool calls, 1 `submit_fix_plan`-shaped call
-- [ ] Record per provider: passes, latency, free-tier limits seen
-- [ ] Pick the models for Investigator, Planner and Reporter → `.env.example` + `VERIFY_RESULTS.md`
-- [ ] Record provider quirks (tool_choice support, JSON mode, parallel calls) as capability flags
+### P1.4 LLM provider smoke test (B8) ✅ 🤖 + 👤
+- [x] 👤 Put the keys in the local `.env`
+- [x] Script `spikes/llm_smoke.py`: for each provider, 1 tool call, 2 parallel tool calls, 1 `submit_fix_plan`-shaped call
+- [x] Record per provider: passes, latency, free-tier limits seen
+- [x] Pick the models for Investigator, Planner and Reporter → `.env.example` + `VERIFY_RESULTS.md`
+- [x] Record provider quirks (tool_choice support, JSON mode, parallel calls) as capability flags
 
 **Done when:** at least one provider passes all 3 calls, and the models are chosen.
 
@@ -313,7 +313,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 **Done when:** `/docs` works locally and `/analyze` on S2 returns the right answer.
 
 ### P5.5 Fast mode on all scenarios + review ④⑤ 👤
-- [ ] 🤖 Fast mode correct on **S1–S8** vs answer keys (script)
+- [x] 🤖 Fast mode correct on **S1–S8** vs answer keys (script)
 - [ ] 👤 Review the tools, guards, pipeline and API. Run `/analyze` yourself.
 - [ ] 👤 Commit
 
@@ -321,37 +321,37 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P6: MCP server and agents: agent mode (Day 2)
 
-### P6.1 MCP server (stdio) ⬜ 🤖
-- [ ] `mcp_server/server.py`: `MCPServer` (mcp 2.x), registers `core.tools`, stdio only. The worker passes FalkorDB env vars via `StdioServerParameters(env=…)`
-- [ ] Profiles `full` / `readonly`
-- [ ] Tool descriptions written for LLMs (short, clear, with limits)
+### P6.1 MCP server (stdio) ✅ 🤖
+- [x] `mcp_server/server.py`: `MCPServer` (mcp 2.x), registers `core.tools`, stdio only. The worker passes FalkorDB env vars via `StdioServerParameters(env=…)`
+- [x] Profiles `full` / `readonly`
+- [x] Tool descriptions written for LLMs (short, clear, with limits)
 
 **Done when:** a test client lists and calls tools over stdio.
 
-### P6.2 LLM gateway ⬜ 🤖
-- [ ] `agents/llm_gateway.py`: providers from env (base URL, key, model per agent)
-- [ ] Pinned provider per agent run; `ProviderFailed` → restart the run on the next provider
-- [ ] Timeout 30 s, 1 retry, capability flags (forced tool choice, JSON mode, parallel)
-- [ ] Response cache in Redis (`llmcache:{hash}`)
+### P6.2 LLM gateway ✅ 🤖
+- [x] `agents/llm_gateway.py`: providers from env (base URL, key, model per agent)
+- [x] Single provider (`LLM_PROVIDER`), called directly; LLM failure → `LLMUnavailable` (degrade)
+- [x] Timeout 30 s, 1 retry, capability flags (forced tool choice, JSON mode, parallel)
+- [x] Response cache in Redis (`llmcache:{hash}`)
 
-**Done when:** a cached second call returns instantly, and failover works with a bad key.
+**Done when:** a cached 2nd call returns instantly, and a bad key gives `LLMUnavailable`.
 
-### P6.3 Agent loop and schemas ⬜ 🤖
-- [ ] `agents/schemas.py`: minimal LLM outputs + code enrichment ([LLD §6.3](docs/03_LLD.md))
-- [ ] `agents/base.py`: MCP stdio client, allow-list → OpenAI tools, turn loop, `json.loads` guard, submit validation, reminder, max turns, degrade
+### P6.3 Agent loop and schemas ✅ 🤖
+- [x] `agents/schemas.py`: minimal LLM outputs + code enrichment ([LLD §6.3](docs/03_LLD.md)). *Enrichment lands with each agent's post-check (P6.4/P6.5).*
+- [x] `agents/base.py`: MCP stdio client, allow-list → OpenAI tools, turn loop, `json.loads` guard, submit validation, reminder, max turns, degrade
 
 **Done when:** a dummy agent completes a 2-tool task.
 
-### P6.4 Investigator ⬜ 🤖
-- [ ] Prompt from [06 §2](docs/06_Agent_Prompts_and_Schemas.md) + allow-list
-- [ ] Post-check (paths are real chains) + enrichment
+### P6.4 Investigator ✅ 🤖
+- [x] Prompt from [06 §2](docs/06_Agent_Prompts_and_Schemas.md) + allow-list
+- [x] Post-check (paths are real chains) + enrichment
 
 **Done when:** on S2 its findings match the answer key.
 
-### P6.5 Planner ⬜ 🤖
-- [ ] Prompt from [06 §3](docs/06_Agent_Prompts_and_Schemas.md) + allow-list incl. `simulate_cut`
-- [ ] Acceptance rule: only simulation-verified cuts. Otherwise the code candidate + `planner_choice_rejected`.
-- [ ] Enrichment (safe, max flow, witnesses, simulation numbers, suggestion)
+### P6.5 Planner ✅ 🤖
+- [x] Prompt from [06 §3](docs/06_Agent_Prompts_and_Schemas.md) + allow-list incl. `simulate_cut`
+- [x] Acceptance rule: only simulation-verified cuts. Otherwise the code candidate + `planner_choice_rejected`.
+- [x] Enrichment (safe, max flow, witnesses, simulation numbers, suggestion)
 
 **Done when:** on S8 it picks the zero-collateral cut.
 
@@ -488,11 +488,21 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 | Date / time | Task | Blocker | Fallback taken | Status |
 |---|---|---|---|---|
 | Oct 15 | P3.1 | `algo.maxFlow` accepts exactly ONE `relationshipTypes` entry, so Q6 can't span the 8 attack types (LLD Q6 assumed a list; P1.3 only tested one type). Details: VERIFY_RESULTS P3.1 | Q6 kept as in the LLD; its test is `xfail(strict)`. P3.1 left unticked | Closed. Fallback: option A (one `:ATTACK` type, real type in `r.kind`) |
+| Oct 15 | P1.4 | Groq: every chat call returned 403 `model_permission_blocked_project` (models list fine) | OpenRouter (`nemotron-3-super`) passed all checks meanwhile | Closed. Fixed: the Default Project's model allow-list only allowed `llama-3.1-8b-instant`; the models are now allowed at org + project level (gpt-oss-120b/20b pass checks 1, 3, 4, 5) |
+| Oct 15 | P6.5 | LLM cache never hit across incidents for the Planner: its task and tool arguments contained the sandbox name (with the random incident id), and one run used 7-9k tokens against Groq's 8000/minute | Fixed: `graph`, `sandbox`, `src` (and the auth params) are injected by the loop, not in the LLM's messages; tool results are compact and sorted. Proven live: a NEW incident (S8 Planner 5/5 steps, S2 Investigator 4/4 steps) is served fully from the cache with the same result | Closed |
+| Oct 15 | P5.5 | `algo.bfs` returns NO row when the source has no outgoing edge; `verify.attack_status` and `fast_brains.investigate` read `[0][0]` and raised IndexError. S6's source-side cut removes both of `user:kai`'s only edges, so `/analyze` ended FAILED | Fixed: `verify.reached_jewels()` returns `[]` for no row; both callers use it. Regression test `test_source_with_no_outgoing_edge_reaches_nothing` | Closed |
 
 ## Decision changes during build
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 15 | Injected tool params (cache follow-up) | LLD 6.1: only `incident_id` and `lock_token` are hidden from the LLM → any param the code already knows (`graph`, `sandbox`, `src`) is injected too (`run_agent(inject=...)`); tool results are compact and key-sorted; the code sets the plan label (`chosen`) from the min-cut candidate names | The incident id in the messages defeated the cache across incidents; fewer arguments for the model to get wrong; fewer tokens | Yes (LLD §6.1, §6.2, docs/06) |
+| Oct 15 | Planner rules (P6.5) | LLD 6.2: the LLM plans every time → no LLM call when the cut is not safe or after a failed Planner cut; a cut is accepted only if simulated ok AND without protected/missing edges; no set is ever simulated twice (a repeated `simulate_cut` is answered from the results already seen) | The split suggestion is proven in code (the LLM adds nothing, and free calls are scarce); `simulate_cut` is limited to 6 per incident and a provider restart re-runs the agent | Yes (LLD §6.2, §16, docs/06 §3) |
+| Oct 15 | LLM 429 wait (P6.5) | One retry after 1.5 s → a 429 waits for its `retry-after` header (capped at `LLM_MAX_WAIT_S` = 20 s), then retries once | Groq's 8000 tokens/minute: back-to-back agents hit 429, and 1.5 s is far too short | Yes (LLD §6.1, §12) |
+| Oct 15 | Who decides the jewels (P6.4) | LLD: the Investigator's findings come from the LLM → `reachable_jewels` is the code BFS (`code_facts`, shared with fast mode); the LLM's list is compared and the difference noted; the LLM's paths are post-checked and enriched in code | The pipeline picks `DONE_NO_RISK` from `reachable_jewels`: a decision must never rest on the LLM's word (graph guarantees, LLM chooses) | Yes (LLD §6.2, docs/06 §2) |
+| Oct 15 | Agent loop tool errors (P6.3) | LLD 6.1: bad arguments = tool error message → bad arguments are checked with `jsonschema` first (error message to the model); an `is_error` MCP result = a crash → `ToolCrashed` (invariant, no retry) | The MCP SDK reports bad arguments as `is_error` too, so without the check a wrong `k` would look like a crash | Yes (LLD §6.1) |
+| Oct 15 | LLM providers (P6.2 follow-up) | One provider → Groq then OpenRouter (`LLM_PROVIDERS`), called directly; an unavailable provider restarts the agent run on the next one (D18); one retry per call + Redis cache kept; all unavailable → degrade to fast brains | Free quotas are small (OpenRouter 50/day); Groq is faster (about 0.7 s) with 1000/day. Earlier: chain → one provider (Portkey tried, dropped: no account) | Yes (CLAUDE.md, HLD 5.3/D14/D18, LLD 6.1/12) |
+| Oct 15 | LLM retry policy (P6.2) | SDK retries (2) then our retry (1) → SDK retries off, the gateway retries once; 401/403/404 fail at once (no retry); a 200 without `choices` is transient; other 4xx are raised as-is | Retries stack up against the 50 free requests/day and the 30 s timeout; blocked or bad-auth providers can't recover by retrying; a 400 is our bug and must not trigger a failover | Yes (LLD §6.1, §12, §13) |
 | Oct 15 | Background usage needs (P2.4) | Random `last_used_days` only → one "daily work" chain per team's first human is forced recent (0–30) | Seed 42 gave ZERO usage needs: a 4-hop path is all-recent only ~2.5% of the time | Yes (LLD §10.2) |
 | Oct 15 | FalkorDB browser host port (P1.2) | `127.0.0.1:3000` → `127.0.0.1:3300` | Port 3000 is used by another project on the dev machine | Yes (LLD §1) |
 | Oct 15 | Split simulation rule (P4.6) | D = "a node with an outgoing flow edge NOT on any protected path" → D = a node on the witness path where the needs of the edge in and the edge out diverge (business non-empty, conflict empty); D must be a Role/Policy/Group. Edges record `r.needs`. `split_suggestion` is its own write tool, not part of `compute_min_cut` | `maxFlow ≥ PROTECT_CAP` is equivalent to an all-protected attack path, so the old rule can never hold (proved with a networkx prototype) | Yes (LLD §4.1, §5) |
@@ -508,6 +518,6 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 | Day | Planned gate | Result | Notes |
 |---|---|---|---|
 | Day 1 (Oct 15) | S1–S3 load, queries match, min-cut = networkx | | |
-| Day 2 (Oct 16) | Fast mode S1–S8 correct, agent mode DONE on S2 | | |
+| Day 2 (Oct 16) | Fast mode S1–S8 correct, agent mode DONE on S2 | | fast mode S1–S8 correct (scripts/check_fast_mode.py) |
 | Day 3 (Oct 17) | UI works, eval table produced, deploy tried | | |
 | Day 4 (Oct 18) | Submitted by 6 PM IST | | |

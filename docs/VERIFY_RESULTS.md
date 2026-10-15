@@ -67,7 +67,7 @@ Run in the toolbox container (same image the worker will use), 2026-10-15. Scrip
 | Streamlit version | 1.66.0 |
 | `st.fragment` `run_every` | yes: `st.fragment(func=None, *, run_every=None, parallel=False, key=None)`; `run_every` accepts int, float, timedelta or str |
 
-- **MCP stdio:** Design impact: none for the architecture (stdio subprocess works). Two details to remember: (1) the SDK name is `MCPServer`, not `FastMCP`, so the docs' "FastMCP" wording is outdated (HLD C4 and §190, LLD line 35, task.md lines 108 and 325) and should be changed in a docs pass; (2) the subprocess gets only a small default environment, so the worker must pass `FALKORDB_HOST`, `FALKORDB_PORT` and `FALKORDB_PASSWORD` explicitly through `StdioServerParameters(env=...)`.
+- **MCP stdio:** Design impact: none for the architecture (stdio subprocess works). Two details to remember: (1) the SDK name is `MCPServer`, not `FastMCP`, so the docs' "FastMCP" wording is outdated (HLD C4 and §190, LLD line 35, task.md lines 108 and 325) (fixed in the P6.1 docs pass: only this file still names it, as history); (2) the subprocess gets only a small default environment, so the worker must pass `FALKORDB_HOST`, `FALKORDB_PORT` and `FALKORDB_PASSWORD` explicitly through `StdioServerParameters(env=...)`.
 - **Streamlit:** Design impact: none. The `st.fragment(run_every=...)` live timeline in the LLD works as written.
 
 ## P3.1 query checks
@@ -89,3 +89,55 @@ FalkorDB 6.0.2, 2026-10-15. Tests: `tests/test_mincut.py`.
 | Item | Result |
 |---|---|
 | `algo.maxFlow` on a graph with two edges between the same pair under one relationship type | **fails**: `relationship type 'ATTACK' contains multi-edges; maxFlow requires a simple adjacency matrix`. Design impact: at most one edge per `(src, dst)`; the loader rejects duplicates (LLD §2.3). Pinned by `test_falkordb_limit_maxflow_rejects_multi_edges`. |
+
+## P5.5 finding: `algo.bfs` with no outgoing edge
+
+Found on S6 (`scripts/check_fast_mode.py`), FalkorDB 6.0.2, 2026-10-15. Test: `tests/test_verify.py::test_source_with_no_outgoing_edge_reaches_nothing`.
+
+| Item | Result |
+|---|---|
+| `algo.bfs(s, 5, null) YIELD nodes` on a node with **no outgoing edge** (even if edges point to it) | **no row** (empty result set), not a row with an empty list. A node with an outgoing edge returns one row. |
+
+Cause: S6's source-side cut removes both of `user:kai`'s only edges, so Q9 on the sandbox returned nothing and `[0][0]` raised `IndexError` (the pipeline ended FAILED).
+Impact: `verify.reached_jewels()` treats no row as `[]`. Q12 (`REACH_SETS`) then simply omits a user left with no outgoing edge, and collateral correctly counts all of that user's access as lost.
+
+## P1.4 LLM smoke test (B8)
+
+Run in the toolbox with `spikes/llm_smoke.py`, 2026-10-15 (raw `openai` SDK, temperature 0, 30 s timeout, one attempt per call, 3 s between calls). Mistral: no key, skipped.
+Checks: 1 single tool call (exact args) · 2 two parallel calls in one response (n = tool_calls returned) · 3 `submit_fix_plan` with forced `tool_choice` (Pydantic-validated) · 4 JSON mode · 5 Markdown `## A ## B ## C`.
+
+**Groq: untested.** `models.list()` works, but every chat call returns `403 model_permission_blocked_project` ("blocked at the project level") for `openai/gpt-oss-120b`, `openai/gpt-oss-20b` and `qwen/qwen3.8-27b`. The models must be enabled in the Groq console (project limits). Groq now lists only 4 chat models (also `allam-2-7b`, context 4096: too small).
+
+Results (best run per model; "rate limited" = upstream 429, not a model failure):
+
+| provider | model | 1 tool | 2 parallel (n) | 3 submit | 4 json | 5 md | forced tool_choice | avg ms |
+|---|---|---|---|---|---|---|---|---|
+| openrouter | nvidia/nemotron-3-super-120b-a12b:free | PASS | 2 | PASS | true | PASS | true | 3613 / 4319 / 4021 (3 runs, identical results) |
+| openrouter | nvidia/nemotron-3-ultra-550b-a55b:free | 503 overloaded | 2 | PASS | true | PASS | true | 7501 |
+| openrouter | poolside/laguna-s-2.1:free | PASS (run 2), FAIL no tool call (run 1) | 2 (run 3) | PASS (run 2) | rate limited | PASS (run 1) | true | 1337 to 2160 |
+| openrouter | poolside/laguna-xs-2.1:free | rate limited | 1 | rate limited | rate limited | PASS | true | 2867 |
+| openrouter | google/gemma-4-31b-it:free | rate limited (every run) | | | | | | |
+| groq | openai/gpt-oss-120b | PASS | 1 | PASS | true | PASS | true | 716 |
+| groq | openai/gpt-oss-20b | PASS | 1 | PASS | true | PASS | true | 485 |
+
+**Chosen (OpenRouter):** Investigator, Planner and Reporter = `nvidia/nemotron-3-super-120b-a12b:free`. It is the only model that passed all five checks, in all three runs, with parallel = 2. The faster Laguna models passed single checks but were upstream-throttled in most runs, so they are not reliable enough. **Done when (P1.4) holds:** one provider (OpenRouter) passes all 3 calls.
+
+**Capability flags** (what the P6.2 gateway reads):
+
+| provider | forced_tool_choice | parallel | json_mode |
+|---|---|---|---|
+| openrouter (nemotron-3-super) | true | true (2 calls in one response) | true |
+| groq (gpt-oss-120b / 20b) | true | **false** (1 call per response) | true |
+| mistral | no key | | |
+
+**Free-tier behaviour seen (OpenRouter):** no `x-ratelimit-*` headers on any response (success or 429), so the gateway cannot read the remaining quota. 429s are **upstream per-model throttles** ("temporarily rate-limited upstream", from the model's host such as Google AI Studio or Poolside), not account limits, and they clear within seconds to minutes. A 200 response can carry an error body with **no `choices`** (`503 provider_overloaded` seen on nemotron-ultra): the gateway must treat `choices` empty/None as a provider failure. Per-call cost on nemotron-super: about 300-600 tokens, 2.5-6 s. Design impact: the provider chain plus the response cache (R15) matter; `nemotron-3-super` is the single model all three agents depend on.
+
+**OpenRouter `GET /key` (P6.2, 2026-10-15; no key in the output):** `is_free_tier: true`, `limit: null` (no credit cap), `usage: 0`, `byok_usage: 0`. **`free_model_daily_requests: {used 0, limit 50, remaining 50}`**: a free-tier account gets **50 requests per day across all `:free` models**. `rate_limit` is `{requests: -1, interval: "10s"}` and marked deprecated. No `x-ratelimit-*` or credit headers. Design impact: 50 free requests per day is the real budget for live agent runs, evals and the demo (R15). The response cache is what keeps the demo and eval repeatable, and the live tests use only 2 calls.
+
+## P6.2 LLM transport (history)
+
+2026-10-15. The gateway first called the provider through hosted Portkey. Its current docs show Model Catalog slugs (`@openrouter`) and no live check was possible without an account: dropped: no Portkey account; direct calls.
+
+Direct OpenRouter check (live tests in `tests/test_llm_gateway.py`, header `X-Title: BreachPath`): 1st call 3433 ms (tool call returned), the identical 2nd call 0 ms (`cached=True`), and a bad `OPENROUTER_API_KEY` gives `LLMUnavailable` ("provider rejected the call: AuthenticationError 401") without a retry.
+
+**Groq limits (response headers, 2026-10-15):** `x-ratelimit-limit-requests: 1000` (per day), `x-ratelimit-limit-tokens: 8000` (per minute; resets in seconds). **Chosen Groq models:** Investigator and Planner `openai/gpt-oss-120b` (about 0.7 s per call), Reporter `openai/gpt-oss-20b` (about 0.5 s). Because Groq does not return parallel calls, an agent makes one tool call per turn (the S2 dummy agent needed 5 turns, about 4.5 s in all, against 3 turns and about 26 s on OpenRouter): watch `max_turns` for the Planner (one `simulate_cut` per candidate) and the 8000 tokens/minute limit (one dummy run used about 5400 tokens). **Provider order (P6.2 follow-up):** `LLM_PROVIDERS=groq,openrouter`; a run that finds its provider unavailable restarts on the next one (D18).
