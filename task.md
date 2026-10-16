@@ -26,11 +26,11 @@
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
 | P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
 | P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
-| P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
+| P9 Hardening and deploy | Day 3 | 🟨 | 5 / 16 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **159 / 209** |
+| **Total** | | | **164 / 214** |
 
-**Now working on:** P8.3 Review ⑧ (yours): read the eval table
+**Now working on:** P9.1 Security controls
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -439,6 +439,15 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P9: Hardening and deploy (Day 3)
 
+### P9.0 LLM budget and robustness ✅ 🤖
+- [x] Simulations reserved for the code: the LLM (`simulate_cut`, constrained `compute_min_cut`) may use 4 of 6; the 5th gets `LIMIT_EXCEEDED`; the code fallback keeps its 2
+- [x] Planner skipped (code, 0 LLM calls, "planner skipped: one verified option") when there is no instruction and only one verified option
+- [x] Hard LLM budget per incident (`LLM_MAX_CALLS_PER_INCIDENT` = 20, `state.llm_calls`, all agents, provider restarts); Planner `max_turns` 8 → 6
+- [x] No pointless retry when the constrained cut proves the instruction impossible; the note says "the instruction rules out every safe cut"
+- [x] Report wording: no internal field names, Next steps after a passed proof, "host action" only on host-action edges (guard + template + prompt)
+
+**Done when:** a live S8 + "Do not change anything between user:max and the reports database." ends NOT_HONOURED with few Planner calls (target ≤ 7) and ≤ 6 simulations (never FAILED); a scenario with one verified option (S3) makes 0 Planner calls; S8 without an instruction still lets the LLM choose.
+
 ### P9.1 Security controls ⬜ 🤖
 - [ ] Only `ui` publishes a port; `api` and `falkordb` use `expose` ([HLD §11.1](docs/02_HLD.md))
 - [ ] FalkorDB password, RO queries, timeouts
@@ -507,6 +516,11 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 16 | Simulations reserved for the code (P9.0) | `MAX_SIMULATIONS` 6 shared by everyone → the LLM (MCP `simulate_cut` and constrained `compute_min_cut`, called with `llm=True`) may use `MAX_SIMULATIONS - SIMS_RESERVED_FOR_CODE` = 4; over that the tool returns `LIMIT_EXCEEDED`; the code's own calls use the full 6; a refused call gives its counter number back | A live S8 run with an instruction used 6/6: one more constrained cut would have made the code fallback (2 candidates) fail → FAILED instead of a safe result. The tool description is unchanged (it is part of the LLM cache key) | Yes (LLD §6.2, §12) |
+| Oct 16 | Planner skip rule (P9.0) | The Planner LLM ran for every safe cut → with NO operator instruction and ONE verified option (the 2 min-cut candidates are the same set, or only one passes `simulate_cut`) the code plan is used: `source: code`, 0 LLM calls, event "planner skipped: one verified option". The code simulates each distinct candidate once and the LLM reuses the results. With an instruction, or 2 different verified candidates, the LLM runs | The LLM cannot choose between anything there. Measured on the 8 scenarios: only S3 (both candidates are `e:s3:02`) skips; S5 already made no call (unsafe); S1, S2, S4, S6, S7, S8 have two different verified candidates | Yes (LLD §6.2) |
+| Oct 16 | LLM budget per incident (P9.0) | No limit (a live run made 18 Planner calls in 4 minutes) → `LLM_MAX_CALLS_PER_INCIDENT` (default 20) counted in `state["llm_calls"]` over ALL agents and provider restarts (cached answers and failed attempts count, so the limit does not depend on the cache); used up → `run_agent` returns `degraded=True`, reason "LLM budget for this incident used up", no provider restart, the code decides; the Reporter counts too (template when used up) | Free tiers (Groq rate limits, OpenRouter 50/day): a runaway model must have a hard cost ceiling | Yes (LLD §12) |
+| Oct 16 | Planner `max_turns` (P9.0) | 8 → 6 (Investigator stays 8). With an instruction that is proven impossible there is no retry any more: the constrained `compute_min_cut` says `safe=false` for the avoided edges → the code cut, note "the instruction rules out every safe cut"; the empty-cut wording stays only without that proof. `planner_instructions.md` tells the model to call the constrained cut once and to submit at once when it says `safe=false` | 18 calls for a result the code could prove after 3 | Yes (LLD §6.2) |
+| Oct 16 | Report wording guard (P9.0) | The word "verified" only for a proven suggestion → also for a fix that passed the proof; new guard rules: no internal field names, "no proven fix" never in Next steps after a passed proof (Next steps say the applied fix was verified, then rotate the leaked credential of `src` and review the removed access with its owners), "host action" only on a line with a host-action edge (`cut_actions.host_action`); the guard's own messages and the prompt use plain words | A live report said "no proven fix" about a verified fix, wrote `plan.avoid` to a manager and tied "host action" to credential rotation | Yes (LLD §6.2, docs/06 §4) |
 | Oct 16 | Operator instructions (P7.7) | agent mode accepts a free-text operator instruction; the Planner turns it into graph constraints; code re-computes and proves | A case where the LLM gives a DIFFERENT, still-proven result than fast mode. The LLM only maps words to edges (`avoid` + quotes); the code checks the quotes and eids, recomputes the cut under the constraint (`compute_min_cut(avoid_eids)`, a guarded copy that counts as a simulation) and verifies with `simulate_cut`. `avoid` is optional in Pydantic so cached answers stay valid; the instruction block is added to the prompt only when there is an instruction (a normal run keeps its cache keys). Also: `degraded_steps` names which step fell back; the status line separates step from attempt | Yes (LLD §5, §6.2, §7.2, §9, §15; docs/06 §3) |
 | Oct 16 | Plan `alternatives` (P7) | A plan recorded only the chosen cut → also `alternatives`: every simulated cut NOT chosen with its collateral, size, staleness and blocks_attack/needs_ok, filled in code from `simulate_cut` (planner and fast mode); shown in Fix & proof, the Reporter slice and the template. The Reporter guard requires the Fix section to name each alternative and its collateral number | The trade-off (why this cut and not the other) is the demo's key sentence; the prompt alone was ignored by the model in a live S8 run | Yes (LLD §6.2, §9, §15, docs/06 §4) |
 | Oct 16 | JSON baseline prompt is compact (P8.1) | docs/06 §5: the whole graph as JSON (nodes with label + crown_jewel, edges as objects) → the same information as rows: `crown_jewels` + edges `[eid, type, src, dst]` + valid needs `[principal, resource]` | The full JSON is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413); no other provider has a key. A node's label is its id prefix, and a node with no edge cannot matter | Yes (docs/06 §5, LLD §11) |

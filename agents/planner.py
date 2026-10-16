@@ -3,8 +3,11 @@
 - The code computes the min-cut. Not safe -> no LLM call at all: the split suggestion is proven in code, the LLM adds nothing.
 - Safe -> the LLM chooses. Its cut is accepted ONLY if a simulate_cut result for exactly those eids says blocks_attack and needs_ok
   (and the cut has no protected or missing edge). Otherwise the code ranking decides and a planner_choice_rejected event says why.
+- No operator instruction and only ONE verified option (the two candidates are the same set, or only one passes simulate_cut): the LLM
+  cannot choose anything, so it is not called ("planner skipped": the code plan, 0 LLM calls).
 - simulate_cut is limited to 6 per incident: no set is ever simulated twice (sims = every result seen; a repeated call is answered
-  from it, also after a provider restart).
+  from it, also after a provider restart). The LLM may use 4 of the 6: 2 are reserved for the code (core/tools/guards.check_quota).
+- An instruction that the constrained compute_min_cut proved impossible (safe=false for the avoided edges) is not retried: the code cut, with the note.
 The plan has EXACTLY the keys of core/fast_brains.plan.
 """
 import json
@@ -23,7 +26,7 @@ from core.tools.common import ToolFailed, unwrap
 SPEC = AgentSpec(
     name="planner", system=(Path(__file__).parent / "prompts" / "planner.md").read_text(encoding="utf-8").strip(),
     allow_list=["compute_min_cut", "simulate_cut", "edge_path_frequency", "choke_points", "get_edge"],
-    submit=SUBMIT_TOOLS["submit_fix_plan"], output_model=FixPlanOut, max_turns=8)
+    submit=SUBMIT_TOOLS["submit_fix_plan"], output_model=FixPlanOut, max_turns=6)
 
 
 INSTRUCTION_PROMPT = (Path(__file__).parent / "prompts" / "planner_instructions.md").read_text(encoding="utf-8").strip()
@@ -92,12 +95,34 @@ def _verdict_on(sandbox, src, key, sims, auth):
 
 
 def _plan_event(emit, plan_, accepted, llm, result, sims):
+    """result: the AgentResult, or None when the LLM was never called (planner skipped)."""
     sim = plan_["simulation"]
     _emit(emit, "plan", f"{plan_['source']} plan: {plan_['cut_eids']}", {
         "chosen": plan_["chosen"], "cut_eids": plan_["cut_eids"], "source": plan_["source"], "llm_choice": list(llm.cut_eids) if llm else None,
         "llm_chosen": llm.chosen if llm else None,
         "accepted": accepted, "collateral": sim["collateral"]["count"] if sim else None, "sims_used": len(sims),
-        "provider": result.provider, "turns": result.turns})
+        "provider": result.provider if result else None, "turns": result.turns if result else 0})
+
+
+def _one_verified_option(sandbox, src, cut, sims, auth):
+    """True when the LLM could choose nothing: the min-cut candidates are ONE set, or only one of the sets passes simulate_cut
+    (blocks_attack and needs_ok). Simulates each distinct set once, into `sims` (the code plan and the LLM reuse them). A tool failure
+    (e.g. the quota) is not 'one option': the LLM path runs as before."""
+    for key in sorted({sim_key(c["eids"]) for c in cut["candidates"]}):
+        try:
+            sims[key] = unwrap(write.simulate_cut(sandbox, src, list(key), **auth))
+        except ToolFailed:
+            return False
+    return sum(bool(s["blocks_attack"] and s["needs_ok"]) for s in sims.values()) == 1
+
+
+def _proved_impossible(llm, constrained, instructions, info):
+    """True when the constrained compute_min_cut for exactly the edges the LLM says it avoided came back safe=false: no cut keeps them
+    untouched (proven by the tool, not by the model). Only counts when the avoid list itself holds up (real eids, real quotes)."""
+    if not llm.avoid or _instruction_problem(llm, instructions, info, ()):
+        return False
+    result = constrained.get(tuple(sorted({a.eid for a in llm.avoid})))
+    return bool(result) and not result["safe"]
 
 
 def _instruction_problem(llm, instructions, known, key):
@@ -160,6 +185,11 @@ async def plan(session, state, *, lock_token, emit=None):
         return _with_instruction(fast_brains.plan(state, lock_token=lock_token), instructions, False, "a cut chosen under the instruction failed verification"), False
 
     sims, constrained = {}, {}
+    if not instructions and _one_verified_option(sandbox, src, cut, sims, auth):  # nothing to choose: the LLM would add nothing
+        plan_ = fast_brains.plan(state, lock_token=lock_token, known_sims=sims)
+        _emit(emit, "step", "planner skipped: one verified option", {"event": "planner_skipped", "cut_eids": plan_["cut_eids"], "sims_used": len(sims)})
+        _plan_event(emit, plan_, None, None, None, sims)
+        return plan_, False
 
     def capture(name, args, result):
         if name == "simulate_cut":
@@ -172,7 +202,7 @@ async def plan(session, state, *, lock_token, emit=None):
     problem = ""
     for attempt in (1, 2) if instructions else (1,):  # with an instruction, ONE retry with the problem; without, the code ranking decides at once
         task = _task(state, cut["max_flow"]) + (f"\nYour previous answer was rejected: {problem}. Fix exactly that and submit again." if problem else "")
-        result = await run_agent(SeenSims(session, sims, constrained), _spec_for(state), task, inject=inject, emit=emit, on_tool_result=capture)
+        result = await run_agent(SeenSims(session, sims, constrained), _spec_for(state), task, inject=inject, emit=emit, on_tool_result=capture, state=state)
         if result.degraded:
             _emit(emit, "step", f"Planner LLM unavailable ({result.reason}): the code ranking decides", {"reason": result.reason})
             note_degraded(state, "planner", result.reason)
@@ -181,6 +211,10 @@ async def plan(session, state, *, lock_token, emit=None):
             return plan_, True
         llm = result.output
         key = sim_key(llm.cut_eids)
+        if instructions and _proved_impossible(llm, constrained, instructions, info):  # the tool proved it: a retry could only repeat it
+            problem = "the instruction rules out every safe cut"
+            _emit(emit, "step", f"planner_choice_rejected: {problem}", {"event": "planner_choice_rejected", "cut_eids": list(llm.cut_eids), "reason": problem})
+            break
         problem = (_instruction_problem(llm, instructions, info, key) if instructions else None) or _verdict_on(sandbox, src, key, sims, auth)
         if not problem:
             break

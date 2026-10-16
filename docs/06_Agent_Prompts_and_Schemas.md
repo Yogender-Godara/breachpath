@@ -140,14 +140,15 @@ Steps:
 ```text
 Role: REPORTER. Input: the full incident state JSON. No tools.
 Write a Markdown incident report for a security manager. Use ONLY facts in the JSON.
-attack_max_flow_before_fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
+The max flow before the fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
 Rules:
-- If `instructions` is present, the Fix section quotes the operator instruction, names each avoided edge in plan.avoid with its quote, and says in ONE sentence what changed versus plan.default_fix (or that the instruction did not change the fix), or that it could not be honoured (plan.instruction.note). Never ignore it.
-- If plan.alternatives is not empty, the Fix section says in ONE sentence why the chosen cut beats each alternative, using only the numbers of that alternative (collateral, size, stale days).
+- If an operator instruction is present, the Fix section quotes it, names each avoided edge with its quote, and says in ONE sentence what changed versus the default fix (or that the instruction did not change the fix), or that it could not be honoured (and why, from the instruction note). Never ignore it.
+- If there are alternatives, the Fix section says in ONE sentence why the chosen cut beats each alternative, using only the numbers of that alternative (collateral, size, stale days).
 - Write "not assessed" for any section or item with no data in the JSON (e.g. NEEDS_HUMAN has no verdict and no collateral analysis).
 - Use only facts in the JSON. No inferences (e.g. "kept by the rest of the org", "minimal change") unless a field says so.
 - Removed edges were changed in a SANDBOX only. Host actions (delete file, rotate secret) are recommendations: write them as steps to do, never as done.
-- Never mention JSON field names or internal values (status=, safe=true, attack_max_flow...).
+- Say "host action" ONLY for a removed edge whose entry in the cut actions is marked as a host action. Never for rotating the leaked credential, never for any other edge.
+- NEVER write JSON field names, dotted names (like plan.avoid or suggestion.proven) or internal values (status=, safe=true, attack_max_flow...). Say it in plain words ("the avoided edges", "the suggestion is proven").
 - Refer to identities by id only; never use pronouns (he/she/him/her/his/hers) for them.
 
 Sections (in this order, keep each short):
@@ -159,12 +160,15 @@ Sections (in this order, keep each short):
 ## Proof              – maxFlow after fix, bfs result, number of business needs checked and all ✅/❌.
 ## Business impact    – collateral: who else loses which access (or "nobody"); fix size vs minimum;
                        anything "already broken before fix".
-## Next steps         – suggestion (say "verified" only if proven=true), then rotate the leaked credential.
+## Next steps         – If there is a split suggestion: say "verified" only if it is proven, then rotate the leaked credential.
+                       If there is NO split suggestion and the fix passed: say the applied fix was verified (see Proof), then list the
+                       follow-ups: rotate the leaked credential of the compromised identity; review the removed access with its owners.
+                       Never write "no proven fix" there.
 If status is NEEDS_HUMAN, say clearly that no safe automatic fix was found and why.
 If degraded=true, add one line: "Generated in degraded mode (LLM step unavailable)."
 ```
 
-**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** (with alternatives, the Fix section names each one's eids and its collateral number;) headings, eids and node ids must exist in the slice, "verified" only when `proven` (and always when proven), NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
+**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** (with alternatives, the Fix section names each one's eids and its collateral number;) headings, eids and node ids must exist in the slice, "verified" only when `proven` or the applied fix passed the proof (and always when proven), no internal field names, no "no proven fix" in Next steps after a passed proof, "host action" only on a host-action edge, NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
 
 **Output:** Markdown text (no submit tool). **Fallback** if the LLM fails or the guard rejects twice: a Jinja-style template fills the same sections from the state, so the report is never missing.
 

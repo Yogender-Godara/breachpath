@@ -1,8 +1,8 @@
 """The Reporter agent (docs/06 section 4, docs/03_LLD.md 6.2): the LLM WRITES the report, the CODE checks every fact in it.
 
 No tools and no MCP session: one chat call over a small JSON slice of the incident state (`_slice`).
-The text must pass `check` (7 headings in order, no invented eid or node id, "verified" only when the suggestion is proven,
-NEEDS_HUMAN says there is no safe automatic fix). Problems -> ONE retry with the problems as a user message; still bad, or no
+The text must pass `check` (7 headings in order, no invented eid or node id, "verified" only for a proven suggestion or a fix that passed
+the proof, no internal field names, "host action" only on a host-action edge, NEEDS_HUMAN says there is no safe automatic fix). Problems -> ONE retry with the problems as a user message; still bad, or no
 provider left -> the template report (core/fast_brains.report) and degraded=True. Fast mode never gets here.
 """
 import json
@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from agents import llm_gateway
-from agents.base import PREAMBLE, note_degraded
+from agents.base import BUDGET_REASON, PREAMBLE, budget_used_up, count_llm_call, note_degraded
 from agents.llm_gateway import LLMUnavailable
 from core import fast_brains
 from core.graph import queries
@@ -35,6 +35,13 @@ NO_ONE = re.compile(r"\b(?:nobody|no one|none)\b", re.IGNORECASE)
 HEADING = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*(.+?)[*_`]*[ \t]*$", re.MULTILINE)
 IMPACT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Business impact.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
 FIX = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Fix\b.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
+NEXT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Next steps\b.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
+HOST_ACTION = re.compile(r"host[ -]actions?", re.IGNORECASE)
+NO_PROVEN = re.compile(r"\bno\s+(?:proven|verified)\b", re.IGNORECASE)  # "no proven fix": wrong when the applied fix WAS verified
+# Names of the JSON the model was given: a manager must never read them ("plan.avoid", "suggestion.proven", "default_fix"...).
+INTERNAL = re.compile(r"\b(?:(?:plan|suggestion|verdict|findings|action|instruction|simulation|collateral)\.[a-z_]+"
+                      r"|attack_max_flow(?:_before_fix)?|cut_actions|cut_eids|applied_eids|host_action|default_fix|degraded_steps|bfs_reached_jewels"
+                      r"|needs_ok|blocks_attack|stale_days_total|max_flow_after_split|reachable_jewels|touches_avoided)\b")
 NOT_ASSESSED = "Not assessed: no collateral analysis was run for this incident."
 COLLATERAL_PROBLEM = 'there is no collateral data: in Business impact do not say "nobody", "no one" or "none"; write "not assessed"'
 
@@ -118,12 +125,28 @@ def check(markdown, slice_):
     for pattern, what in ((EID, "eid"), (NODE, "node id")):
         allowed = set(pattern.findall(known))
         problems += [f"{what} {token} is not in the incident JSON: remove it" for token in dict.fromkeys(pattern.findall(markdown)) if token not in allowed]
-    proven = bool(((slice_.get("plan") or {}).get("suggestion") or {}).get("proven"))
+    suggestion = (slice_.get("plan") or {}).get("suggestion")
+    proven = bool((suggestion or {}).get("proven"))
+    fix_passed = bool((slice_.get("verdict") or {}).get("pass"))  # the applied fix was proven by the Verifier: "verified" is a fact
     said_verified = bool(re.search(r"\bverified\b", markdown, re.IGNORECASE))
-    if said_verified and not proven:
-        problems.append('the word "verified" may only be used when plan.suggestion.proven is true: use another word')
+    if said_verified and not (proven or fix_passed):
+        problems.append('the word "verified" may only be used for a proven suggestion or a fix that passed the proof: use another word')
     if proven and not said_verified:
-        problems.append('plan.suggestion.proven is true: say that the suggestion is "verified" (in Next steps) and give its proof (suggestion.proof)')
+        problems.append('the split suggestion is proven: say that it is "verified" (in Next steps) and give its proof')
+    if names := list(dict.fromkeys(INTERNAL.findall(markdown))):
+        problems.append(f"do not name internal fields ({', '.join(names)}): say it in plain words")
+    next_steps = (NEXT.search(markdown) or [None, ""])[1]
+    if fix_passed and not suggestion and next_steps.strip():
+        missing = [w for w in ("verified", "rotate", "review") if w not in next_steps.lower()]
+        if NO_PROVEN.search(next_steps) or missing:
+            problems.append("Next steps: there is no split suggestion, but the applied fix was verified (see Proof). Do not say there is no proven fix; "
+                            f"say the applied fix was verified, then list: rotate the leaked credential of {slice_['src']}, review the removed access with its owners")
+    hosts = {c["eid"] for c in (slice_.get("plan") or {}).get("cut_actions", []) if c["host_action"]}
+    for line in markdown.splitlines():
+        if HOST_ACTION.search(line) and not (set(EID.findall(line)) & hosts) and (EID.search(line) or re.search(r"rotat", line, re.IGNORECASE) or not hosts):
+            problems.append('"host action" may only be attached to a removed edge whose action is a host action'
+                            + (f" ({', '.join(sorted(hosts))})" if hosts else " (none was removed here)")
+                            + f", never to rotating a credential or another edge: remove it from the line \"{line.strip()[:90]}\"")
     if slice_["status"] == "NEEDS_HUMAN" and not re.search(r"no (?:automatic )?safe (?:automatic )?(?:fix|cut)", markdown, re.IGNORECASE):
         problems.append("the status is NEEDS_HUMAN: say clearly that no safe automatic fix was found, and why")
     impact = (IMPACT.search(markdown) or [None, ""])[1]
@@ -144,7 +167,7 @@ def check(markdown, slice_):
         if "instruction" not in fix.lower() or gone:
             problems.append("an operator instruction was given: the Fix section must mention the instruction"
                             + (f" and name the avoided edge(s) {', '.join(gone)}" if gone else "")
-                            + ", say what changed versus default_fix (or that nothing changed), or that it could not be honoured")
+                            + ", say what changed versus the default fix (or that nothing changed), or that it could not be honoured")
     if pronouns := dict.fromkeys(w.lower() for w in PRONOUN.findall(markdown)):
         problems.append(f"do not use pronouns for identities ({', '.join(pronouns)}): refer to them by id")
     for line in MODE_LINE.findall(markdown):
@@ -178,12 +201,17 @@ def _unfence(text):
     return re.sub(r"\A```(?:markdown|md)?[ \t]*\n(.*?)\n?```\Z", r"\1", text.strip(), flags=re.DOTALL)
 
 
-def _ask(provider, slice_, emit, tally):
+def _ask(provider, slice_, emit, tally, state):
     """One call, and ONE retry when the guard finds problems (they are sent back as a user message).
     -> (markdown, repaired) or (None, False). repaired: after the retry the ONLY problem left was a collateral claim without data, so the
-    code replaced the Business impact body by NOT_ASSESSED. LLMUnavailable goes up: the caller tries the next provider."""
+    code replaced the Business impact body by NOT_ASSESSED. LLMUnavailable goes up: the caller tries the next provider.
+    Every call counts toward the incident's LLM budget; when it is used up the template decides (tally["budget"])."""
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _user_message(slice_)}]
     for attempt in (1, 2):
+        if budget_used_up(state):
+            tally["budget"] = True
+            return None, False
+        count_llm_call(state)
         result = llm_gateway.chat("reporter", provider, messages, temperature=TEMPERATURE)
         tally["llm_calls"] += 1
         tally["provider"], tally["model"] = result.provider, result.model
@@ -209,7 +237,7 @@ def write(state, emit=None):
     markdown, repaired, reasons = None, False, []
     for provider in llm_gateway.providers_for("reporter"):
         try:
-            markdown, repaired = _ask(provider, slice_, emit, tally)
+            markdown, repaired = _ask(provider, slice_, emit, tally, state)
         except LLMUnavailable as e:
             _emit(emit, "step", f"Reporter provider {provider} unavailable: {e}", {"provider": provider, "reason": str(e)})
             reasons.append(str(e))
@@ -217,7 +245,8 @@ def write(state, emit=None):
         break  # a good report, or still bad after the retry: the template decides, not another provider
     degraded = markdown is None
     if degraded:
-        note_degraded(state, "reporter", "no LLM provider configured" if not tally["llm_calls"] and not reasons else "; ".join(reasons) if not tally["llm_calls"]
+        note_degraded(state, "reporter", BUDGET_REASON if tally.get("budget") else
+                      "no LLM provider configured" if not tally["llm_calls"] and not reasons else "; ".join(reasons) if not tally["llm_calls"]
                       else "fact check failed twice")
         markdown = fast_brains.report({**state, "degraded": True})["markdown"]  # the same sections; adds the degraded line (with the steps)
     elif state["degraded"] and fast_brains.degraded_line(state.get("degraded_steps")) not in markdown:

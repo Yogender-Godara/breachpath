@@ -51,7 +51,7 @@ def _apply(graph, eids):
     return sorted(deletable), sorted(missing), sorted(refused), stale_total
 
 
-def min_cut_avoiding(sandbox, src, avoid, *, incident_id, lock_token):
+def min_cut_avoiding(sandbox, src, avoid, *, incident_id, lock_token, llm=False):
     """compute_min_cut under an operator constraint: the edges in `avoid` get cap = PROTECT_CAP on a throw-away copy (-sim-n, guarded, counts toward
     the simulation quota, deleted in finally), then the candidates are computed as usual. Returns the min-cut dict + "avoided" (+ why it is
     impossible when no safe cut is left)."""
@@ -63,7 +63,7 @@ def min_cut_avoiding(sandbox, src, avoid, *, incident_id, lock_token):
     if unknown:
         raise BadInput(f"unknown eid(s) in avoid_eids: {unknown}")
     plain = mincut.compute_min_cut(sandbox, src)  # without the constraint: tells whether the constraint is what makes a safe cut impossible
-    n = guards.check_quota(incident_id, "simulation")
+    n = guards.check_quota(incident_id, "simulation", llm=llm)
     sim = _name(sandbox_name, sandbox.split(":")[1], incident_id, f"-sim-{n}")
     guards.check_write(sim, incident_id, lock_token)
     get_graph(sandbox).copy(sim)
@@ -146,14 +146,15 @@ def apply_fix(sandbox, eids, reason, *, incident_id, lock_token):
 
 
 @tool
-def simulate_cut(sandbox, src, eids, *, incident_id, lock_token):
-    """Try a cut on a throw-away copy of the prepared sandbox and report what it does. The sandbox is not changed."""
+def simulate_cut(sandbox, src, eids, *, incident_id, lock_token, llm=False):
+    """Try a cut on a throw-away copy of the prepared sandbox and report what it does. The sandbox is not changed.
+    llm=True: the call came from the LLM (MCP wrapper): it may not use the simulations reserved for the code (guards.check_quota)."""
     guards.check_write(sandbox, incident_id, lock_token)
     _check_eids(eids)
     _existing(sandbox)
     if not ro_query(sandbox, queries.NODE_INFO, {"id": src}):
         raise NotFound(f"node {src} not found in {sandbox}")
-    n = guards.check_quota(incident_id, "simulation")
+    n = guards.check_quota(incident_id, "simulation", llm=llm)
     sim = _name(sandbox_name, sandbox.split(":")[1], incident_id, f"-sim-{n}")
     guards.check_write(sim, incident_id, lock_token)
 

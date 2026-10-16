@@ -17,7 +17,7 @@ def new_state(tenant, src, mode, instructions=""):
     """instructions: the operator's free-text instruction (agent mode only; the Planner turns it into graph constraints)."""
     now = _now()
     return {"id": secrets.token_hex(4), "tenant": tenant, "src": src, "mode": mode,
-            "status": "QUEUED", "attempt": 0, "degraded": False, "degraded_steps": [], "instructions": instructions,
+            "status": "QUEUED", "attempt": 0, "degraded": False, "degraded_steps": [], "instructions": instructions, "llm_calls": 0,
             "baseline_graph": baseline_name(tenant), "sandbox_graph": None,
             "created_at": now, "updated_at": now,
             "findings": None, "plan": None, "action": None, "verdict": None, "report": None,

@@ -108,11 +108,12 @@ def test_still_bad_after_the_retry_does_not_try_the_next_provider(s2, monkeypatc
     assert [c["provider"] for c in gateway.calls] == ["p1", "p1"]
 
 
-def test_the_word_verified_is_rejected_unless_the_suggestion_is_proven(s2, s5):
-    text = template(s2) + "\n- The fix was verified in the sandbox.\n"
-    problems = reporter.check(text, slice_of(s2))
-    assert len(problems) == 1 and '"verified"' in problems[0]
-    assert reporter.check(template(s2) + "\nUnverified claims are not made here.\n", slice_of(s2)) == []  # 'unverified' is another word
+def test_the_word_verified_is_rejected_unless_the_suggestion_is_proven_or_the_fix_passed_the_proof(s2, s5):
+    assert reporter.check(template(s2) + "\n- The fix was verified in the sandbox.\n", slice_of(s2)) == []  # S2: the applied fix passed the proof
+    good = template(s2)
+    s2["verdict"]["pass"] = False  # a fix that did NOT pass the proof is never "verified"
+    assert any('"verified"' in p for p in reporter.check(good, slice_of(s2)))
+    assert reporter.check(good.replace("verified", "checked") + "\nUnverified claims are not made here.\n", slice_of(s2)) == []  # 'unverified' is another word
     assert "Verified" in template(s5) and reporter.check(template(s5), slice_of(s5)) == []  # S5's suggestion is proven
     s5["plan"]["suggestion"]["proven"] = False
     assert any("verified" in p for p in reporter.check(template(s5), slice_of(s5)))
@@ -122,10 +123,49 @@ def test_a_proven_suggestion_must_be_called_verified(s5):
     slice_ = slice_of(s5)
     plain = re.sub(r"verified", "checked", template(s5), flags=re.IGNORECASE)
     problems = reporter.check(plain, slice_)
-    assert len(problems) == 1 and "proven is true" in problems[0] and "verified" in problems[0]
+    assert len(problems) == 1 and "is proven" in problems[0] and "verified" in problems[0]
     assert reporter.check(template(s5), slice_) == []
     s5["plan"]["suggestion"]["proven"] = False  # not proven: no 'verified' needed (and not allowed)
     assert reporter.check(plain, slice_of(s5)) == []
+
+
+def test_internal_field_names_are_never_in_the_report(s2):
+    slice_ = slice_of(s2)
+    good = template(s2)
+    assert reporter.check(good, slice_) == []
+    for leak in ("plan.avoid", "suggestion.proven", "default_fix", "attack_max_flow_before_fix", "cut_actions", "host_action: true", "verdict.pass"):
+        problems = reporter.check(good + f"\nSee {leak}.\n", slice_)
+        assert len(problems) == 1 and "internal fields" in problems[0] and leak.split(":")[0] in problems[0], leak
+    assert reporter.check(good + "\nThe default fix and the avoided edges are plain words. Max flow before the fix was 2.\n", slice_) == []
+    assert not any("plan." in p or "proven is true" in p for p in reporter.check(good.replace("e:s2:05", "e:s2:99"), slice_))  # the guard's own messages stay plain
+
+
+def test_without_a_split_suggestion_next_steps_say_the_fix_was_verified_and_list_the_follow_ups(s2, s5):
+    good = template(s2)
+    nxt = good.split("## Next steps")[1]
+    assert "verified (see Proof)" in nxt and "Rotate the leaked credential of user:ravi" in nxt and "Review the removed access with its owners" in nxt
+    assert "no proven" not in nxt.lower() and "suggestion" not in nxt.lower()
+    wrong = good.replace(nxt, "\n- No proven fix suggestion. Rotate the leaked credential of user:ravi.\n- Review the removed access with its owners.\n")
+    problems = reporter.check(wrong, slice_of(s2))
+    assert len(problems) == 1 and "Do not say there is no proven fix" in problems[0] and "user:ravi" in problems[0]
+    for drop in ("Rotate", "Review", "verified"):  # each follow-up is required
+        partial = good.replace(nxt, "\n" + "\n".join(line for line in nxt.strip().splitlines() if drop not in line) + "\n")
+        assert any("Next steps" in p for p in reporter.check(partial, slice_of(s2))), drop
+    assert reporter.check(template(s5), slice_of(s5)) == []  # a split suggestion: the old wording rules, no change
+
+
+def test_host_action_only_on_a_removed_edge_that_is_a_host_action(s2, states):
+    slice_ = slice_of(s2)  # e:s2:10 (delete the file and rotate the secret) is a host action, e:s2:05 (detach the policy) is not
+    good = template(s2)
+    assert "e:s2:10" in good and "[host action]" in good and reporter.check(good, slice_) == []
+    wrong_edge = good.replace("Detach the policy:", "Detach the policy [host action]:")  # the IAM edge e:s2:05 is no host action
+    assert any('"host action" may only be attached' in p for p in reporter.check(wrong_edge, slice_))
+    rotation = reporter.check(good + "\n- Rotate the leaked credential of user:ravi (a host action).\n", slice_)
+    assert len(rotation) == 1 and "never to rotating a credential" in rotation[0]
+    assert reporter.check(good + "\nThe host actions below are recommendations, not done.\n", slice_) == []  # a general sentence is fine
+    s8 = states["s8"]  # S8 removes an IAM edge only: no host action exists, so the words must not appear at all
+    assert reporter.check(template(s8), slice_of(s8)) == []
+    assert any("none was removed here" in p for p in reporter.check(template(s8) + "\nThe host actions are pending.\n", slice_of(s8)))
 
 
 def test_pronouns_for_identities_are_rejected_as_whole_words(s2):
@@ -150,10 +190,10 @@ def test_a_generated_in_mode_line_is_only_allowed_as_the_exact_degraded_line_whe
     assert reporter.check(good + normal, slice_) != []
 
 
-def test_a_verified_answer_is_retried(s2, monkeypatch):
+def test_an_answer_with_an_internal_field_name_is_retried(s2, monkeypatch):
     good = template(s2)
-    gateway = Gateway(monkeypatch, say(good + "\nIt was verified.\n"), say(good))
-    assert reporter.write(s2) == (good, False) and "verified" in gateway.calls[1]["messages"][-1]["content"]
+    gateway = Gateway(monkeypatch, say(good + "\nThe plan.avoid list is empty.\n"), say(good))
+    assert reporter.write(s2) == (good, False) and "internal fields (plan.avoid)" in gateway.calls[1]["messages"][-1]["content"]
 
 
 def test_all_providers_unavailable_falls_back_to_the_template_and_degraded(s2, monkeypatch):
@@ -180,6 +220,18 @@ def test_a_failing_retry_goes_to_the_next_provider(s2, monkeypatch):
     good = template(s2)
     gateway = Gateway(monkeypatch, {"p1": [say(good.replace("e:s2:05", "e:s2:99")), LLMUnavailable("down")], "p2": [say(good)]})
     assert reporter.write(s2) == (good, False) and [c["provider"] for c in gateway.calls] == ["p1", "p1", "p2"]
+
+
+def test_the_reporter_counts_its_calls_and_the_template_takes_over_when_the_budget_is_used_up(s2, monkeypatch):
+    good = template(s2)
+    Gateway(monkeypatch, say(good.replace("e:s2:05", "e:s2:99")), say(good))
+    assert reporter.write(s2) == (good, False) and s2["llm_calls"] == 2  # the retry counts
+    from core import config
+    s2["llm_calls"] = config.LLM_MAX_CALLS_PER_INCIDENT
+    gateway = Gateway(monkeypatch, say(good))
+    markdown, degraded = reporter.write(s2)
+    assert degraded is True and gateway.calls == [] and markdown.startswith(template({**s2, "degraded": False})[:40])
+    assert s2["degraded_steps"] == ["reporter: LLM budget for this incident used up"]
 
 
 def test_the_degraded_line_is_added_when_the_incident_is_already_degraded(s2, monkeypatch):

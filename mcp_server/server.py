@@ -44,7 +44,7 @@ def choke_points(graph: str, src: str, top: int = 10) -> dict:
 
 def compute_min_cut(graph: str, src: str, avoid_eids: list[str] | None = None, incident_id: str | None = None, lock_token: str | None = None) -> dict:
     """Min-cut candidates that block every attack path from `src` while keeping business-critical edges (max-flow = min-cut). Returns candidates with witness paths, max_flow and `safe`. safe=false means every cut would break a business need. `avoid_eids`: edges the cut must NOT use (an operator instruction): the candidates are computed under that constraint (one throw-away copy, counts as a simulation); `safe` is then about the constrained problem and the result says which avoided edge makes a safe cut impossible."""
-    return read.compute_min_cut(graph, src, avoid_eids, incident_id, lock_token)
+    return read.compute_min_cut(graph, src, avoid_eids, incident_id, lock_token, llm=True)  # llm=True: the code's reserved simulations stay free
 
 
 def check_business_access(graph: str) -> dict:
@@ -78,8 +78,8 @@ def run_readonly_cypher(graph: str, query: str, params: dict | None = None) -> d
 
 
 def simulate_cut(sandbox: str, src: str, eids: list[str], incident_id: str, lock_token: str) -> dict:
-    """Try removing edges `eids` on a throw-away copy of the sandbox and report: blocks_attack, needs_ok, collateral, size. The sandbox is unchanged. Max 6 simulations per incident. Sandbox graphs only."""
-    return write.simulate_cut(sandbox, src, eids, incident_id=incident_id, lock_token=lock_token)
+    """Try removing edges `eids` on a throw-away copy of the sandbox and report: blocks_attack, needs_ok, collateral, size. The sandbox is unchanged. Max 6 simulations per incident. Sandbox graphs only."""  # the text is part of the LLM cache key: keep it. The 4-for-the-LLM limit is in guards.check_quota
+    return write.simulate_cut(sandbox, src, eids, incident_id=incident_id, lock_token=lock_token, llm=True)
 
 
 def create_sandbox(tenant: str, incident_id: str, lock_token: str) -> dict:

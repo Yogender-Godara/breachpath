@@ -71,7 +71,7 @@ async def investigate(session, state, emit=None):
 
     problems = ""
     for attempt in (1, 2):  # the second one only after a failed first one
-        result = await run_agent(session, SPEC, task + problems, inject={"graph": graph, "src": src}, emit=emit)
+        result = await run_agent(session, SPEC, task + problems, inject={"graph": graph, "src": src}, emit=emit, state=state)
         valid, dropped = ([], []) if result.degraded else check_paths(result.output.paths, src, edges, jewels)
         for reason in dropped:
             _note(emit, f"dropped path: {reason}", {"dropped": reason, "attempt": attempt})

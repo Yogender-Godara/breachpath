@@ -79,6 +79,30 @@ def test_an_unavailable_provider_restarts_the_run_on_the_next_one_with_a_fresh_c
     assert restart and restart[0].startswith("provider p1 unavailable: provider rejected the call")
 
 
+def test_the_incident_budget_counts_every_call_across_provider_restarts_and_ends_the_run_at_once(s2, monkeypatch):
+    monkeypatch.setattr(config, "LLM_MAX_CALLS_PER_INCIDENT", 3)
+    call = message(("get_blast_radius", {"graph": BASE, "src": SRC}))
+    gw = Gateway(monkeypatch, {"p1": [call, LLMUnavailable("down")], "p2": [call, call]})
+    state, events = {"llm_calls": 0}, []
+    result = run(spec(), state=state, emit=lambda type_, msg, data, **kw: events.append(msg))
+    assert result.degraded and result.reason == base.BUDGET_REASON == "LLM budget for this incident used up"
+    assert [c["provider"] for c in gw.calls] == ["p1", "p1", "p2"] and state["llm_calls"] == 3  # the failed attempt counts too
+    assert any(base.BUDGET_REASON in m for m in events) and not any("restarting" in m and "budget" in m for m in events)  # a budget stop is not a provider failure
+    gw2 = Gateway(monkeypatch, {"p1": [call], "p2": [call]})  # the same incident again (e.g. a retry attempt): not one more call
+    again = run(spec(), state=state)
+    assert again.degraded and again.reason == base.BUDGET_REASON and gw2.calls == [] and state["llm_calls"] == 3
+
+
+def test_a_run_without_a_state_has_no_budget_and_a_normal_run_counts_its_calls(s2, monkeypatch):
+    call = message(("get_blast_radius", {"graph": BASE, "src": SRC}))
+    Gateway(monkeypatch, call, message(("submit_findings", GOOD)))
+    assert not run(spec()).degraded  # no state: nothing is counted or limited
+    Gateway(monkeypatch, call, message(("submit_findings", GOOD)))
+    state = {"llm_calls": 5}
+    result = run(spec(), state=state)
+    assert not result.degraded and result.llm_calls == 2 and state["llm_calls"] == 7
+
+
 def test_invalid_output_twice_is_final_no_restart(s2, monkeypatch):
     gw = Gateway(monkeypatch, {"p1": [message(("submit_findings", {"x": 1})), message(("submit_findings", {"y": 2}))],
                                "p2": [message(("submit_findings", GOOD))]})

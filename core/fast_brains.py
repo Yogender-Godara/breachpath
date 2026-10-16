@@ -204,7 +204,9 @@ def _next(state):
         return "- No action needed. Re-run the check after the next access change."
     if state["status"] == "NEEDS_HUMAN":
         return f"- Manual review: {state.get('failure_detail') or 'no automatic fix could be proven'}.\n- Rotate the credentials of {state['src']}."
-    return f"- Rotate the credentials of {state['src']}.\n- Review the removed access with its owners."
+    verified = state["verdict"] and state["verdict"]["pass"]  # the applied fix was proven (Proof): no suggestion is needed to say so
+    return ("- The applied fix was verified (see Proof).\n" if verified else "") + (
+        f"- Rotate the leaked credential of {state['src']}.\n- Review the removed access with its owners.")
 
 
 DEGRADED_LINE = "Generated in degraded mode (LLM step unavailable)."

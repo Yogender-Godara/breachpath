@@ -3,7 +3,7 @@ from core.graph import client
 from orchestrator import state
 
 KEYS = ["id", "tenant", "src", "mode", "status", "attempt", "degraded", "baseline_graph", "sandbox_graph",
-        "created_at", "updated_at", "findings", "plan", "action", "verdict", "report", "history", "tried_changes", "retry_change", "degraded_steps", "instructions"]
+        "created_at", "updated_at", "findings", "plan", "action", "verdict", "report", "history", "tried_changes", "retry_change", "degraded_steps", "instructions", "llm_calls"]
 
 
 def test_new_state_has_exactly_the_lld_fields():

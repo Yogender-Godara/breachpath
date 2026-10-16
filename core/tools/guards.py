@@ -31,8 +31,10 @@ def check_write(graph, incident_id, lock_token):
         raise GuardRefused(f"lock for incident {incident_id} is not held by this caller")
 
 
-def check_quota(incident_id, kind):
-    """Run before creating a NEW graph. kind: "sandbox" or "simulation" (returns the simulation number n)."""
+def check_quota(incident_id, kind, llm=False):
+    """Run before creating a NEW graph. kind: "sandbox" or "simulation" (returns the simulation number n).
+    llm=True (a call that came from the LLM through the MCP tools): simulations are limited to MAX_SIMULATIONS - SIMS_RESERVED_FOR_CODE,
+    so the code fallback can always run its own (it uses the full limit). A refused call does not use a number."""
     if kind not in ("sandbox", "simulation"):
         raise BadInput(f"quota kind must be 'sandbox' or 'simulation', got {kind!r}")
     graphs = get_db().list_graphs()
@@ -45,8 +47,11 @@ def check_quota(incident_id, kind):
     else:
         # A counter: simulation copies are deleted after each run, so counting graphs could not enforce this.
         redis = get_db().connection
+        limit = config.MAX_SIMULATIONS - (config.SIMS_RESERVED_FOR_CODE if llm else 0)
         count = redis.incr(_sims_key(incident_id))
         redis.expire(_sims_key(incident_id), SIMS_TTL_S)
-        if count > config.MAX_SIMULATIONS:
-            raise LimitExceeded(f"incident {incident_id} used {count - 1} simulations (limit {config.MAX_SIMULATIONS})")
+        if count > limit:
+            redis.decr(_sims_key(incident_id))  # give the number back: a refused LLM call must not eat the reserved ones
+            reserved = f"; the other {config.MAX_SIMULATIONS - limit} are reserved for the code" if llm else ""
+            raise LimitExceeded(f"incident {incident_id} used {count - 1} simulations (limit {limit}{reserved})")
         return count  # the n of this simulation, used for the -sim-<n> graph name

@@ -11,6 +11,7 @@ QUERY_TIMEOUT_MS = int(os.getenv("QUERY_TIMEOUT_MS", "2000"))
 NEED_USAGE_DAYS = int(os.getenv("NEED_USAGE_DAYS", "30"))
 MAX_ATTEMPTS = int(os.getenv("MAX_ATTEMPTS", "3"))
 MAX_SIMULATIONS = int(os.getenv("MAX_SIMULATIONS", "6"))
+SIMS_RESERVED_FOR_CODE = int(os.getenv("SIMS_RESERVED_FOR_CODE", "2"))  # the code fallback needs up to 2 (the two candidates): the LLM never uses them
 MAX_SANDBOXES = int(os.getenv("MAX_SANDBOXES", "3"))
 MAX_GRAPHS = int(os.getenv("MAX_GRAPHS", "20"))
 SANDBOX_TTL_HOURS = int(os.getenv("SANDBOX_TTL_HOURS", "24"))
@@ -22,6 +23,7 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
 LLM_MAX_TOKENS_BASELINE = int(os.getenv("LLM_MAX_TOKENS_BASELINE", "4000"))  # docs/06 section 6
 LLM_MAX_TOKENS_REPORTER = int(os.getenv("LLM_MAX_TOKENS_REPORTER", "2500"))  # docs/06 section 6: the report is longer than a tool plan
 LLM_MAX_WAIT_S = float(os.getenv("LLM_MAX_WAIT_S", "20"))  # the longest we wait for a 429's retry-after
+LLM_MAX_CALLS_PER_INCIDENT = int(os.getenv("LLM_MAX_CALLS_PER_INCIDENT", "20"))  # all agents and provider restarts of one incident
 LLM_CACHE = os.getenv("LLM_CACHE", "on").strip().lower() in ("on", "true", "1")
 LLM_CACHE_TTL_S = int(os.getenv("LLM_CACHE_TTL_S", str(7 * 24 * 3600)))
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")  # empty = agent mode is disabled

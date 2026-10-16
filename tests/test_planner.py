@@ -124,8 +124,8 @@ def test_a_cut_the_llm_never_simulated_is_simulated_once_in_code_then_accepted(d
         Gateway(monkeypatch, submit(["e:s8:05"]))
         plan, degraded = run_plan(state, token)
         used = sims_used(state)
-    assert not degraded and plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:05"] and used == 1
-    assert plan["alternatives"] == []  # nothing else was simulated: nothing to compare
+    assert not degraded and plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:05"] and used == 2  # both candidates, simulated once by the code
+    assert [a["cut_eids"] for a in plan["alternatives"]] == [["e:s8:07"]]  # the other candidate, for the trade-off
 
 
 def test_the_label_is_set_by_the_code_not_by_the_llm(db, monkeypatch):
@@ -162,7 +162,7 @@ def test_the_same_set_is_never_simulated_twice_even_if_the_llm_asks_again(db, mo
         gw = Gateway(monkeypatch, message(sim(state, ["e:s8:05"])), message(sim(state, ["e:s8:05"])), submit(["e:s8:05"]))
         plan, _ = run_plan(state, token)
         used = sims_used(state)
-    assert used == 1 and plan["source"] == "planner"  # the repeat was answered from the results already seen
+    assert used == 2 and plan["source"] == "planner"  # the 2 candidates once (the code's); the LLM's repeat was answered from the results already seen
     repeat = [m for m in gw.calls[2]["messages"] if m["role"] == "tool"]
     assert len(repeat) == 2 and repeat[0]["content"] == repeat[1]["content"]  # byte for byte the same answer
 
@@ -189,7 +189,7 @@ def test_a_degraded_run_falls_back_to_the_code_ranking_without_simulating_twice(
         plan, degraded = run_plan(state, token, emit=lambda t, m, d, **kw: events.append((t, m, d)))
         used = sims_used(state)
     assert degraded is True and plan["source"] == "code" and plan["cut_eids"] == ["e:s8:05"] and set(plan) == FAST_KEYS
-    assert used == 2  # the LLM's one simulation was reused; only the other candidate was simulated
+    assert used == 2  # both candidates were simulated once before the LLM ran: the fallback simulates nothing again
     assert [m for t, m, d in events if "unavailable" in m] and [d for t, m, d in events if t == "plan"][0]["accepted"] is False
 
 
@@ -383,3 +383,135 @@ def test_a_repeated_constrained_call_is_answered_from_the_first_one(db, monkeypa
     # ONE constrained copy + ONE simulate_cut for both attempts (the repeats were answered from what was already seen: 6 without that),
     # plus the 2 candidates the code fallback simulates once both answers were rejected
     assert used == 4
+
+
+# --- LLM budget and robustness (P9.0): call the LLM only when it can add something, and never let it break the code's fallback ---
+
+S3_SRC = json.load(open("data/answer_keys/s3.json"))["src"]
+IMPOSSIBLE = "Do not change anything between user:max and the reports database."
+IMPOSSIBLE_QUOTE = "anything between user:max and the reports database"
+
+
+def plan_events(events):
+    return [d for t, m, d in events if t == "plan"]
+
+
+def test_one_verified_option_skips_the_llm_and_says_so(db, monkeypatch):
+    gw = Gateway(monkeypatch)  # an empty script: any chat call would fail the test
+    events = []
+    with prepared("s3", S3_SRC) as (state, token):  # S3: both min-cut candidates are the SAME edge
+        plan, degraded = run_plan(state, token, emit=lambda t, m, d, **kw: events.append((t, m, d)))
+        used = sims_used(state)
+    assert gw.calls == [] and degraded is False and state["llm_calls"] == 0
+    assert plan["source"] == "code" and plan["cut_eids"] == ["e:s3:02"] and set(plan) == FAST_KEYS and plan["simulation"]["blocks_attack"]
+    assert used == 1  # the one distinct set was simulated once; fast_brains.plan reused it
+    assert "planner skipped: one verified option" in [m for t, m, d in events]
+    assert plan_events(events) == [{"chosen": plan["chosen"], "cut_eids": ["e:s3:02"], "source": "code", "llm_choice": None, "llm_chosen": None, "accepted": None,
+                                    "collateral": 0, "sims_used": 1, "provider": None, "turns": 0}]
+
+
+def test_two_candidates_but_only_one_passes_simulate_cut_also_skips_the_llm(db, monkeypatch):
+    real = write.simulate_cut
+
+    def sim_that_breaks_a_need_on_the_source_side(sandbox, src, eids, **kw):
+        result = real(sandbox, src, eids, **kw)
+        if list(eids) == ["e:s8:05"]:
+            result["data"]["needs_ok"] = False
+        return result
+    monkeypatch.setattr(write, "simulate_cut", sim_that_breaks_a_need_on_the_source_side)
+    gw = Gateway(monkeypatch)
+    with prepared(*S8) as (state, token):
+        plan, degraded = run_plan(state, token)
+        used = sims_used(state)
+    assert gw.calls == [] and not degraded and plan["source"] == "code" and plan["cut_eids"] == ["e:s8:07"] and used == 2
+    assert plan["alternatives"][0]["cut_eids"] == ["e:s8:05"] and plan["alternatives"][0]["needs_ok"] is False
+
+
+def test_two_different_verified_candidates_still_run_the_llm_and_count_its_calls(db, monkeypatch):
+    with prepared(*S8) as (state, token):  # S8 (and S2): two verified options with different collateral
+        gw = Gateway(monkeypatch, message(sim(state, ["e:s8:05"]), sim(state, ["e:s8:07"])), submit(["e:s8:05"]))
+        plan, _ = run_plan(state, token)
+        used = sims_used(state)
+    assert len(gw.calls) == 2 and state["llm_calls"] == 2 and plan["source"] == "planner" and used == 2  # the LLM's repeats cost no simulation
+
+
+def test_an_instruction_always_runs_the_llm_even_when_there_is_one_option(db, monkeypatch):
+    with prepared("s3", S3_SRC) as (state, token):
+        gw = Gateway(monkeypatch, submit_avoid(["e:s3:02"], [], notes="Nothing to avoid."))
+        plan, _ = run_plan(with_instruction(state, "Please be careful."), token)
+    assert len(gw.calls) == 1 and plan["source"] == "planner" and plan["instruction"]["honoured"] is True
+
+
+def test_the_llm_cannot_use_the_two_simulations_reserved_for_the_code(db, monkeypatch):
+    # The model keeps trying new avoid sets. Its 5th constrained cut is refused (LIMIT_EXCEEDED, a normal tool error it can read), and the
+    # incident still ends with the code's proven cut: the code's own simulations had their 2 left.
+    avoids = [["e:s8:05"], ["e:s8:06"], ["e:s8:07"], ["e:s8:08"], ["e:s8:09"]]
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, *[message(("compute_min_cut", {"avoid_eids": a})) for a in avoids], submit_avoid([], []), submit_avoid([], []))
+        plan, degraded = run_plan(with_instruction(state, LEGACY), token)
+        used = sims_used(state)
+    replies = [[m["content"] for m in call["messages"] if m["role"] == "tool"] for call in gw.calls]
+    assert all('"ok":true' in r[-1] for r in replies[1:5])  # constrained cuts 1-4 worked
+    assert '"code":"LIMIT_EXCEEDED"' in replies[5][-1] and "reserved for the code" in replies[5][-1]  # the 5th was refused
+    assert not degraded and plan["source"] == "code" and plan["cut_eids"] == ["e:s8:05"]  # the code cut, proven: not a FAILED incident
+    assert plan["simulation"]["blocks_attack"] and plan["simulation"]["needs_ok"] and plan["instruction"]["honoured"] is False
+    assert used == 6  # 4 for the LLM + the code's 2; the refused 5th call used no number
+
+
+def test_the_code_may_use_all_six_simulations_but_the_llm_only_four(db):
+    from core.tools import guards
+    from core.tools.common import LimitExceeded
+    redis = client.get_db().connection
+    try:
+        for n in range(1, 5):
+            assert guards.check_quota("p90quota", "simulation", llm=True) == n
+        with pytest.raises(LimitExceeded, match="reserved for the code"):
+            guards.check_quota("p90quota", "simulation", llm=True)
+        assert redis.get("quota:inc:p90quota:sims") == "4"  # a refused call gives its number back
+        assert [guards.check_quota("p90quota", "simulation"), guards.check_quota("p90quota", "simulation")] == [5, 6]
+        with pytest.raises(LimitExceeded):
+            guards.check_quota("p90quota", "simulation")
+    finally:
+        redis.delete("quota:inc:p90quota:sims")
+
+
+def test_a_proved_impossible_instruction_is_not_retried_and_the_note_says_why(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        avoid = [(e, IMPOSSIBLE_QUOTE) for e in ("e:s8:05", "e:s8:06", "e:s8:07")]
+        gw = Gateway(monkeypatch, message(("compute_min_cut", {"avoid_eids": ["e:s8:05", "e:s8:06", "e:s8:07"]})),
+                     submit_avoid([], avoid, notes="Everything between them is ruled out."), submit_avoid([], avoid))  # the 3rd message must stay unused
+        events = []
+        plan, degraded = run_plan(with_instruction(state, IMPOSSIBLE), token, emit=lambda t, m, d, **kw: events.append((t, m, d)))
+        used = sims_used(state)
+    assert len(gw.calls) == 2 and len(gw.scripts["fake"]) == 1 and not degraded  # no retry: one tool turn and the submit
+    assert plan["source"] == "code" and plan["cut_eids"] == ["e:s8:05"] and plan["instruction"]["honoured"] is False
+    note = plan["instruction"]["note"]
+    assert note.startswith("the instruction rules out every safe cut") and "no safe cut keeps" in note and "although" not in note
+    assert plan["notes"].startswith("Instruction could not be honoured: the instruction rules out every safe cut")
+    assert used == 3  # the constrained copy + the code's 2 candidates
+    assert len([m for t, m, d in events if "planner_choice_rejected" in m]) == 1
+
+
+def test_an_empty_cut_without_that_proof_keeps_the_old_wording_and_the_one_retry(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, submit_avoid([], []), submit_avoid([], []))
+        plan, _ = run_plan(with_instruction(state, LEGACY), token)
+    assert len(gw.calls) == 2 and "the cut is empty although a safe cut exists" in plan["instruction"]["note"]
+
+
+def test_an_unsupported_avoid_list_is_not_taken_as_proof(db, monkeypatch):
+    with prepared(*S8) as (state, token):  # the constrained cut IS unsafe, but the quote the model gives is not in the instruction: retry, not a verdict
+        bad = [(e, "not in the instruction") for e in ("e:s8:05", "e:s8:06", "e:s8:07")]
+        gw = Gateway(monkeypatch, message(("compute_min_cut", {"avoid_eids": ["e:s8:05", "e:s8:06", "e:s8:07"]})), submit_avoid([], bad), submit_avoid([], bad))
+        plan, _ = run_plan(with_instruction(state, IMPOSSIBLE), token)
+    assert len(gw.calls) == 3 and "is not a substring of the operator instruction" in plan["instruction"]["note"]
+
+
+def test_the_incident_budget_ends_the_planner_at_once_and_the_code_decides(db, monkeypatch):
+    from core import config
+    with prepared(*S8) as (state, token):
+        state["llm_calls"] = config.LLM_MAX_CALLS_PER_INCIDENT  # all spent (e.g. by the Investigator and earlier attempts)
+        gw = Gateway(monkeypatch)
+        plan, degraded = run_plan(state, token)
+    assert gw.calls == [] and degraded is True and plan["source"] == "code" and plan["cut_eids"] == ["e:s8:05"]
+    assert state["degraded_steps"] == ["planner: LLM budget for this incident used up"]

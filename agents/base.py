@@ -51,6 +51,21 @@ def note_degraded(state, step, reason):
         steps.append(label)
 
 
+BUDGET_REASON = "LLM budget for this incident used up"
+
+
+def budget_used_up(state):
+    """True when the incident already made LLM_MAX_CALLS_PER_INCIDENT calls (all agents, all provider restarts: state["llm_calls"],
+    saved with the checkpoint). A runaway model can then never cost more than that."""
+    return state is not None and state.get("llm_calls", 0) >= config.LLM_MAX_CALLS_PER_INCIDENT
+
+
+def count_llm_call(state):
+    """One request to a provider (a cached answer and a failed attempt count too: the limit must not depend on the cache)."""
+    if state is not None:
+        state["llm_calls"] = state.get("llm_calls", 0) + 1
+
+
 class ToolCrashed(Exception):
     """An MCP tool raised an exception (not a normal {"ok": false} error). The pipeline turns a MinCutError into NEEDS_HUMAN."""
 
@@ -144,10 +159,11 @@ async def _call_tool(session, call, schemas, hidden, inject, on_result=None):
     return (text if len(text) <= MAX_TOOL_RESULT_CHARS else text[:MAX_TOOL_RESULT_CHARS] + "...(truncated)"), ok
 
 
-async def run_agent(session, spec, task, *, inject=None, emit=None, on_tool_result=None):
+async def run_agent(session, spec, task, *, inject=None, emit=None, on_tool_result=None, state=None):
     """inject = values the loop puts into every tool call that HAS that parameter (e.g. graph, sandbox, src, incident_id, lock_token).
     They are removed from the LLM's schema, so the model never sees or writes them (and its messages do not depend on the incident).
-    emit(type, msg, data, latency_ms=, tokens_in=, tokens_out=). on_tool_result(name, args, result_dict) runs after every successful tool call."""
+    emit(type, msg, data, latency_ms=, tokens_in=, tokens_out=). on_tool_result(name, args, result_dict) runs after every successful tool call.
+    state = the incident state: its llm_calls counter is the per-incident budget (BUDGET_REASON -> degraded=True at once, no provider restart)."""
     inject = inject or {}
     tools, hidden = await load_tools(session, spec, inject)
     needs = [n for n, h in hidden.items() if any(p in ALWAYS_HIDDEN and p not in inject for p in h)]
@@ -155,7 +171,7 @@ async def run_agent(session, spec, task, *, inject=None, emit=None, on_tool_resu
         raise ValueError(f"tools {needs} need incident_id and lock_token: pass them in inject")
     providers, total, reasons = llm_gateway.providers_for(spec.name), AgentResult(), []
     for i, provider in enumerate(providers):
-        out, unavailable = await _run_once(provider, session, spec, task, tools, hidden, inject, emit, on_tool_result)  # a fresh conversation each time
+        out, unavailable = await _run_once(provider, session, spec, task, tools, hidden, inject, emit, on_tool_result, state)  # a fresh conversation each time
         total.llm_calls, total.tokens_in, total.tokens_out = (total.llm_calls + out.llm_calls, total.tokens_in + out.tokens_in,
                                                               total.tokens_out + out.tokens_out)
         out.llm_calls, out.tokens_in, out.tokens_out = total.llm_calls, total.tokens_in, total.tokens_out
@@ -169,7 +185,7 @@ async def run_agent(session, spec, task, *, inject=None, emit=None, on_tool_resu
     return total
 
 
-async def _run_once(provider, session, spec, task, tools, hidden, inject, emit, on_tool_result):
+async def _run_once(provider, session, spec, task, tools, hidden, inject, emit, on_tool_result, state=None):
     """One attempt on one provider -> (AgentResult, True if it ended because the LLM was unavailable)."""
     schemas = {t["function"]["name"]: t["function"]["parameters"] for t in tools}
     submit = spec.submit["function"]["name"]
@@ -181,7 +197,11 @@ async def _run_once(provider, session, spec, task, tools, hidden, inject, emit, 
         return out, False
 
     for turn in range(1, spec.max_turns + 1):
+        if budget_used_up(state):
+            _note(emit, "step", f"{BUDGET_REASON}: the code decides", {"llm_calls": state["llm_calls"], "limit": config.LLM_MAX_CALLS_PER_INCIDENT})
+            return degrade(BUDGET_REASON)
         forced = {"type": "function", "function": {"name": submit}}  # the last turn forces the submit (if the provider can)
+        count_llm_call(state)
         try:
             res = await asyncio.to_thread(llm_gateway.chat, spec.name, provider, messages, tools,
                                        forced if turn == spec.max_turns else "auto", spec.temperature)
