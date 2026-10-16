@@ -68,6 +68,26 @@ def test_cut_rows_show_one_row_per_edge_with_the_action_and_a_host_tag_and_the_r
     assert not any("on every attack path" in r for _, r in view.reason_lines(plan))
 
 
+ALT = {"cut_eids": ["e:s8:07"], "name": "sink_side", "blocks_attack": True, "needs_ok": True, "collateral": {"count": 12, "weighted": 12}, "size": 1,
+       "stale_days_total": 150}
+
+
+def test_the_alternatives_table_and_the_tradeoff_sentence_use_the_simulation_numbers():
+    plan = {"cut_eids": ["e:s8:05"], "simulation": {"collateral": {"count": 0, "weighted": 0}, "size": 1}, "alternatives": [ALT]}
+    assert view.alternative_rows(plan) == [{"cut": "e:s8:07", "label": "sink_side", "blocks the attack": "yes", "pairs that lose access": 12,
+                                            "weighted": 12, "size": 1, "stale days": 150, "decision": "rejected"}]
+    assert view.tradeoff(plan) == ("Chosen e:s8:05: 0 (user, resource) pair(s) lose access (weighted 0), size 1. "
+                                   "Rejected e:s8:07: blocks the attack, but 12 (user, resource) pair(s) would lose access (weighted 12), size 1.")
+    unsafe = {**ALT, "blocks_attack": False}
+    assert view.alternative_rows({"alternatives": [unsafe]})[0]["blocks the attack"] == "NO" and "does not block the attack safely" in view.tradeoff({**plan, "alternatives": [unsafe]})
+    assert view.alternative_rows({"alternatives": []}) == [] and view.tradeoff({**plan, "alternatives": []}) == "" and view.tradeoff({"alternatives": [ALT]}) == ""
+
+
+def test_src_options_keeps_only_users_and_puts_the_default_first():
+    assert view.src_options("user:b", ["role:x", "user:a", "user:b", "group:g"]) == ["user:b", "user:a"]
+    assert view.src_options("user:b", []) == ["user:b"]
+
+
 def test_the_proof_checklist():
     good = {"attack_max_flow": 0.0, "bfs_reached_jewels": [], "business": [{"need_id": "n1", "ok": True}, {"need_id": "n2", "ok": True}],
             "collateral": {"count": 0, "weighted": 0, "pairs": []}}
@@ -124,6 +144,8 @@ def app(monkeypatch):
     calls = []
     monkeypatch.setattr(api_client, "scenarios", lambda: [{"id": "s2", "title": "CI deployer", "src": "user:ravi", "description": "d"},
                                                           {"id": "s5", "title": "Shared policy", "src": "user:zoe", "description": "d"}])
+    users = {"s2": ["group:s2-ci", "user:alice", "user:ravi", "role:s2-deploy-role", "user:zed"], "s5": ["user:zoe", "user:ann"]}
+    monkeypatch.setattr(api_client, "users", lambda sid: users[sid])
     monkeypatch.setattr(api_client, "load_scenario", lambda sid: (calls.append(("load", sid)), {"graph": "g", "nodes": 128, "edges": 165})[1])
     monkeypatch.setattr(api_client, "analyze", lambda tenant, src: (calls.append(("analyze", tenant, src)), fast_result())[1])
     monkeypatch.setattr(api_client, "start_incident",
@@ -150,6 +172,26 @@ def test_the_sidebar_lists_the_scenarios_and_agent_mode_needs_a_token(app):
     assert app.sidebar.radio(key="mode").disabled is False
 
 
+def test_the_src_dropdown_lists_only_users_with_the_scenarios_src_first(app, monkeypatch):
+    src = app.sidebar.selectbox[1]
+    assert src.label == "Src identity" and list(src.options) == ["user:ravi", "user:alice", "user:zed"]  # users only (a role or group is never a src)
+    app.sidebar.selectbox[0].select("s5 · Shared policy").run()
+    assert list(app.sidebar.selectbox[1].options) == ["user:zoe", "user:ann"]  # follows the scenario, its own src first
+    button(app, "Run").click().run()
+    assert app.api_calls == [("analyze", "s5", "user:zoe")]
+    app.sidebar.selectbox[1].select("user:ann").run()
+    button(app, "Run").click().run()
+    assert app.api_calls[-1] == ("analyze", "s5", "user:ann")
+
+
+def test_the_src_dropdown_falls_back_to_the_scenarios_own_src_when_the_users_are_unknown(app, monkeypatch):
+    def not_loaded(sid):
+        raise api_client.ApiError("NOT_FOUND", "not loaded")
+    monkeypatch.setattr(api_client, "users", not_loaded)
+    app.run()
+    assert list(app.sidebar.selectbox[1].options) == ["user:ravi"] and not app.exception
+
+
 def test_load_calls_the_api_and_says_how_many_nodes(app):
     button(app, "Load scenario").click().run()
     assert app.api_calls == [("load", "s2")] and any("128 nodes, 165 edges" in s.value for s in app.sidebar.success)
@@ -166,6 +208,15 @@ def test_a_fast_run_fills_every_tab(app):
     assert any("+2 more edges not shown" in c.value for c in app.caption)
     assert any(c.value == "+41 other protected business edges (company-wide) hidden" for c in app.caption)
     assert any("No evaluation results yet" in i.value for i in app.info)
+
+
+def test_fix_and_proof_shows_the_alternatives_considered_under_the_chosen_fix(app, monkeypatch):
+    monkeypatch.setattr(api_client, "analyze", lambda tenant, src: fast_result(simulation={"collateral": {"count": 0, "weighted": 0}, "size": 1}, alternatives=[ALT]))
+    button(app, "Run").click().run()
+    assert any(h.value == "Alternatives considered" for h in app.subheader)
+    assert any(m.value.startswith("Chosen e:2: 0 (user, resource) pair(s) lose access") and "Rejected e:s8:07: blocks the attack, but 12" in m.value for m in app.markdown)
+    table = next(df.value for df in app.dataframe if "pairs that lose access" in df.value.columns)
+    assert table.iloc[0]["cut"] == "e:s8:07" and table.iloc[0]["decision"] == "rejected" and table.iloc[0]["weighted"] == 12
 
 
 def test_an_unverified_suggestion_is_a_warning_and_a_verified_one_a_success(app, monkeypatch):

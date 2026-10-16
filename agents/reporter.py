@@ -34,6 +34,7 @@ NO_ONE = re.compile(r"\b(?:nobody|no one|none)\b", re.IGNORECASE)
 # "## Heading" with markdown decoration around it ("**## Summary**", "## **Summary**") counts as a heading: group 1 is the plain text.
 HEADING = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*(.+?)[*_`]*[ \t]*$", re.MULTILINE)
 IMPACT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Business impact.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
+FIX = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Fix\b.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
 NOT_ASSESSED = "Not assessed: no collateral analysis was run for this incident."
 COLLATERAL_PROBLEM = 'there is no collateral data: in Business impact do not say "nobody", "no one" or "none"; write "not assessed"'
 
@@ -68,6 +69,7 @@ def _slice(state, kinds):
         out["plan"] = {
             "cut_eids": p["cut_eids"], "chosen": p["chosen"], "safe": p["safe"], "notes": p["notes"][:MAX_DETAIL],
             "reasons": p["reasons"], "witness": p["witness"], "suggestion": p["suggestion"],
+            "alternatives": p.get("alternatives", []),
             "simulation": sim and {"collateral": _collateral(sim["collateral"]), "size": sim["size"], "min_size": sim["min_size"]},
             "cut_actions": [{"eid": e, "action": EDGE_TYPES[kinds[e]]["remediation"], "host_action": bool(EDGE_TYPES[kinds[e]].get("host_action"))}
                             for e in p["cut_eids"] if e in kinds]}
@@ -123,6 +125,15 @@ def check(markdown, slice_):
     no_collateral_data = not (slice_.get("plan") or {}).get("simulation") and not (slice_.get("verdict") or {}).get("collateral")
     if no_collateral_data and impact.strip() and (NO_ONE.search(impact) or "not assessed" not in impact.lower()):
         problems.append(COLLATERAL_PROBLEM)
+    fix = (FIX.search(markdown) or [None, ""])[1]
+    for alt in (slice_.get("plan") or {}).get("alternatives", []):
+        # the eids alone are not enough (an alternative's edge can also be on the witness path): its collateral number must be there too
+        missing = [e for e in alt["cut_eids"] if e not in slice_["plan"]["cut_eids"] and e not in fix]
+        no_number = not re.search(rf"(?<![\w.]){alt['collateral']['count']}(?![\w.])", fix)
+        if fix.strip() and (missing or no_number):
+            problems.append(f"the Fix section must say in one sentence why the chosen cut beats the alternative {', '.join(alt['cut_eids'])} "
+                            f"(collateral {alt['collateral']['count']}, weighted {alt['collateral']['weighted']}, size {alt['size']}, stale days {alt['stale_days_total']}): "
+                            f"name its eids and give its numbers")
     if pronouns := dict.fromkeys(w.lower() for w in PRONOUN.findall(markdown)):
         problems.append(f"do not use pronouns for identities ({', '.join(pronouns)}): refer to them by id")
     for line in MODE_LINE.findall(markdown):

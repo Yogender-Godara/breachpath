@@ -33,6 +33,11 @@ def scenarios():
     return _call("GET", "/scenarios")
 
 
+def users(sid):
+    """The User ids of a loaded scenario (a src must be a User)."""
+    return _call("GET", f"/scenarios/{sid}/users")["users"]
+
+
 def load_scenario(sid):
     return _call("POST", f"/scenarios/{sid}/load", json={"tenant": sid})
 

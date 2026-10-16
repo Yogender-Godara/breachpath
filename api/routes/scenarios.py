@@ -3,8 +3,8 @@ import re
 from fastapi import APIRouter
 
 from api.errors import ApiError
-from core.graph import loader
-from core.graph.client import get_db
+from core.graph import loader, queries
+from core.graph.client import get_db, ro_query
 from core.graph.schema import baseline_name
 from data.scenarios import SCENARIO_DIR, build, load_scenario
 
@@ -23,6 +23,14 @@ def list_scenarios():
         sc = load_scenario(path)
         out.append({"id": sc["id"], "title": sc["title"], "src": sc["src"], "description": sc["title"]})
     return out
+
+
+@router.get("/scenarios/{sid}/users")
+def scenario_users(sid):
+    """The User nodes of the loaded baseline: the only valid values for `src` (the UI's dropdown)."""
+    if not re.fullmatch(r"[a-z0-9-]+", sid) or baseline_name(sid) not in get_db().list_graphs():
+        raise ApiError(404, "NOT_FOUND", f"scenario {sid} is not loaded: POST /v1/scenarios/{sid}/load")
+    return {"users": [r[0] for r in ro_query(baseline_name(sid), queries.USER_IDS)]}
 
 
 @router.post("/scenarios/{sid}/load")

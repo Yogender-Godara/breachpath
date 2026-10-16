@@ -35,6 +35,11 @@ def _quote(text):
     return '"' + _esc(text) + '"'
 
 
+def src_options(default_src, users):
+    """The Src dropdown: only User ids, the scenario's own src first."""
+    return [default_src] + [u for u in users if u != default_src and u.startswith("user:")]
+
+
 def graph_dot(view):
     """The sub-graph (api/graph_view.py: {nodes, edges}) as Graphviz DOT, left to right with the src first. src = red, crown jewel = gold,
     cut edge = red dashed, protected edge = green, attack path = amber, other = grey. Colour: cut > protected > path > other.
@@ -95,6 +100,26 @@ def reason_lines(plan):
         action, host, planner = split_reason(r["why"])
         out.append((r["eid"], planner or action + (" (host action)" if host else "")))
     return out
+
+
+def alternative_rows(plan):
+    """The 'Alternatives considered' table: every simulated cut that was NOT chosen, with the numbers that made it lose."""
+    return [{"cut": ", ".join(a["cut_eids"]), "label": a.get("name") or "", "blocks the attack": "yes" if a["blocks_attack"] and a["needs_ok"] else "NO",
+             "pairs that lose access": a["collateral"]["count"], "weighted": a["collateral"]["weighted"], "size": a["size"],
+             "stale days": a["stale_days_total"], "decision": "rejected"} for a in plan.get("alternatives") or []]
+
+
+def tradeoff(plan):
+    """The trade-off in one sentence per cut, from the simulation numbers only ('' when nothing else was simulated)."""
+    sim, alts = plan.get("simulation"), plan.get("alternatives") or []
+    if not sim or not alts:
+        return ""
+    col = sim["collateral"]
+    chosen = f"Chosen {', '.join(plan['cut_eids'])}: {col['count']} (user, resource) pair(s) lose access (weighted {col['weighted']}), size {sim['size']}."
+    rejected = [f"Rejected {', '.join(a['cut_eids'])}: {'blocks the attack' if a['blocks_attack'] and a['needs_ok'] else 'does not block the attack safely'}, "
+                f"but {a['collateral']['count']} (user, resource) pair(s) would lose access (weighted {a['collateral']['weighted']}), size {a['size']}."
+                for a in alts]
+    return " ".join([chosen, *rejected])
 
 
 def checks(verdict):

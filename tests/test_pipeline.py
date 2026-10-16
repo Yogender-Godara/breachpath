@@ -75,6 +75,11 @@ def test_s8_prefers_the_cut_with_no_collateral(falkordb):
         assert state["status"] == "DONE" and state["plan"]["cut_eids"] == ["e:s8:05"]
         assert state["plan"]["simulation"]["collateral"]["count"] == 0
         assert sims_used(state) == 2  # both candidates were simulated
+        # the trade-off is in the plan (filled in code): the cut it did not take, and what that one would have cost
+        assert state["plan"]["alternatives"] == [{"cut_eids": ["e:s8:07"], "name": "sink_side", "blocks_attack": True, "needs_ok": True,
+                                                  "collateral": {"count": 12, "weighted": 12}, "size": 1, "stale_days_total": 150}]
+        fix = state["report"]["markdown"].split("## Fix")[1].split("## Proof")[0]
+        assert "Alternatives considered:\n- e:s8:07 · blocks the attack · 12 (user, resource) pair(s) would lose access (weighted 12) · size 1, stale 150 days · rejected" in fix
 
 
 def test_s5_needs_human_with_a_proven_split(falkordb):

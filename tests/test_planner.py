@@ -17,7 +17,7 @@ from orchestrator.lock import hold_lock
 from orchestrator.state import new_state
 from tests.agent_fakes import Gateway, message
 
-FAST_KEYS = {"cut_eids", "chosen", "source", "reasons", "notes", "safe", "max_flow", "witness", "simulation", "suggestion"}
+FAST_KEYS = {"cut_eids", "chosen", "source", "reasons", "notes", "safe", "max_flow", "witness", "simulation", "suggestion", "alternatives"}
 S8 = ("s8", "user:max")  # source_side [e:s8:05] has collateral 0, sink_side [e:s8:07] has collateral 12
 
 
@@ -110,6 +110,9 @@ def test_a_simulated_choice_is_accepted_and_enriched_in_code(db, monkeypatch):
     assert plan["witness"] == {"e:s8:05": ["e:s8:01", "e:s8:05", "e:s8:06", "e:s8:07"]}  # the attack path it cuts
     assert plan["reasons"][0]["eid"] == "e:s8:05" and "Planner: a stale legacy role (300 days)" in plan["reasons"][0]["why"]
     assert plan["notes"] == "Zero collateral. size 1 vs minimum 1."
+    # the trade-off: the cut it did NOT take, from the simulate_cut result (code, never the LLM)
+    assert plan["alternatives"] == [{"cut_eids": ["e:s8:07"], "name": "sink_side", "blocks_attack": True, "needs_ok": True,
+                                     "collateral": {"count": 12, "weighted": 12}, "size": 1, "stale_days_total": 150}]
     final = [d for t, m, d in events if t == "plan"][0]
     assert final == {"chosen": "source_side", "cut_eids": ["e:s8:05"], "source": "planner", "llm_choice": ["e:s8:05"], "llm_chosen": "source_side", "accepted": True,
                      "collateral": 0, "sims_used": 2, "provider": "fake", "turns": 2}
@@ -122,6 +125,7 @@ def test_a_cut_the_llm_never_simulated_is_simulated_once_in_code_then_accepted(d
         plan, degraded = run_plan(state, token)
         used = sims_used(state)
     assert not degraded and plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:05"] and used == 1
+    assert plan["alternatives"] == []  # nothing else was simulated: nothing to compare
 
 
 def test_the_label_is_set_by_the_code_not_by_the_llm(db, monkeypatch):

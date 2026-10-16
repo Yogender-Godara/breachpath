@@ -51,6 +51,20 @@ def _reason(info, eid, witness):
     return {"eid": eid, "why": f"{EDGE_TYPES[kind]['remediation']}: {u} → {v}{host}{on_paths}"}
 
 
+def alternative(eids, sim, name=None):
+    """A simulated cut that was NOT chosen, as the plan records it. Filled in code from the simulate_cut result: the LLM never writes it."""
+    return {"cut_eids": list(eids), "name": name, "blocks_attack": sim["blocks_attack"], "needs_ok": sim["needs_ok"],
+            "collateral": {"count": sim["collateral"]["count"], "weighted": sim["collateral"]["weighted"]},
+            "size": sim["size"], "stale_days_total": sim["stale_days_total"]}
+
+
+def alternatives_ranked(sims, chosen, names=None):
+    """Every simulated cut except `chosen` (a sorted eid tuple), best first by the same ranking as the choice."""
+    names = names or {}
+    rows = [alternative(k, s, names.get(k, "custom")) for k, s in sims.items() if k != chosen]
+    return sorted(rows, key=lambda a: (not (a["blocks_attack"] and a["needs_ok"]), a["collateral"]["weighted"], a["size"], -a["stale_days_total"], a["cut_eids"]))
+
+
 def plan(state, *, lock_token, known_sims=None):
     """known_sims = {tuple(sorted(eids)): simulate_cut data} already seen in this incident: never simulated twice (6 per incident)."""
     sandbox, src = state["sandbox_graph"], state["src"]
@@ -58,7 +72,7 @@ def plan(state, *, lock_token, known_sims=None):
     cut = unwrap(read.compute_min_cut(sandbox, src))  # MinCutError is not caught here: the pipeline turns it into NEEDS_HUMAN
     max_flow = int(cut["max_flow"])
     base = {"cut_eids": [], "chosen": None, "source": "code", "reasons": [], "notes": "", "safe": cut["safe"],
-            "max_flow": max_flow, "witness": {}, "simulation": None, "suggestion": None}
+            "max_flow": max_flow, "witness": {}, "simulation": None, "suggestion": None, "alternatives": []}
     if not cut["safe"]:
         base["suggestion"] = unwrap(split.split_suggestion(sandbox, src, **auth))
         base["notes"] = f"No safe cut: max flow {max_flow} means an attack path made only of business-critical edges."
@@ -86,6 +100,7 @@ def plan(state, *, lock_token, known_sims=None):
                         for _, c, s in candidates)
     return {**base, "cut_eids": best["eids"], "chosen": best["name"], "witness": best["witness"], "simulation": sim,
             "reasons": [_reason(info, e, best["witness"]) for e in best["eids"]],
+            "alternatives": [alternative(c["eids"], s, c["name"]) for _, c, s in candidates[1:]],
             "notes": f"Chose {best['name']} (collateral, then size, then staleness). {summary}."}
 
 
@@ -117,7 +132,18 @@ def _fix(state):
     if not plan_ or not plan_["cut_eids"]:
         return "No automatic fix was applied."
     lines = [f"- `{r['eid']}`: {r['why']}" for r in plan_["reasons"]]
-    return "\n".join(lines) + f"\n\n{plan_['notes']}"
+    text = "\n".join(lines) + f"\n\n{plan_['notes']}"
+    if plan_.get("alternatives"):
+        text += "\n\nAlternatives considered:\n" + "\n".join(f"- {alternative_line(a)}" for a in plan_["alternatives"])
+    return text
+
+
+def alternative_line(a):
+    """One alternative in words, from its numbers only: 'e:s8:07 · blocks the attack · 12 (user, resource) pair(s) would lose access (weighted 12) · rejected'."""
+    blocks = "blocks the attack" if a["blocks_attack"] and a["needs_ok"] else "does NOT block the attack safely"
+    lost = a["collateral"]
+    return (f"{', '.join(a['cut_eids'])} · {blocks} · {lost['count']} (user, resource) pair(s) would lose access (weighted {lost['weighted']}) · "
+            f"size {a['size']}, stale {a['stale_days_total']} days · rejected")
 
 
 def _proof(state):

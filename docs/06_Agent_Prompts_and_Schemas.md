@@ -136,6 +136,7 @@ Role: REPORTER. Input: the full incident state JSON. No tools.
 Write a Markdown incident report for a security manager. Use ONLY facts in the JSON.
 attack_max_flow_before_fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
 Rules:
+- If plan.alternatives is not empty, the Fix section says in ONE sentence why the chosen cut beats each alternative, using only the numbers of that alternative (collateral, size, stale days).
 - Write "not assessed" for any section or item with no data in the JSON (e.g. NEEDS_HUMAN has no verdict and no collateral analysis).
 - Use only facts in the JSON. No inferences (e.g. "kept by the rest of the org", "minimal change") unless a field says so.
 - Removed edges were changed in a SANDBOX only. Host actions (delete file, rotate secret) are recommendations: write them as steps to do, never as done.
@@ -156,7 +157,7 @@ If status is NEEDS_HUMAN, say clearly that no safe automatic fix was found and w
 If degraded=true, add one line: "Generated in degraded mode (LLM step unavailable)."
 ```
 
-**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** headings, eids and node ids must exist in the slice, "verified" only when `proven` (and always when proven), NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
+**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** (with alternatives, the Fix section names each one's eids and its collateral number;) headings, eids and node ids must exist in the slice, "verified" only when `proven` (and always when proven), NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
 
 **Output:** Markdown text (no submit tool). **Fallback** if the LLM fails or the guard rejects twice: a Jinja-style template fills the same sections from the state, so the report is never missing.
 

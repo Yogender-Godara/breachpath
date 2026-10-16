@@ -125,6 +125,15 @@ def test_scenarios_list_has_the_eight(api):
     assert all(sorted(r) == ["description", "id", "src", "title"] for r in rows)
 
 
+def test_scenario_users_lists_only_users_and_404_when_not_loaded(api):
+    api.post("/v1/scenarios/s8/load")
+    users = api.get("/v1/scenarios/s8/users").json()["users"]
+    assert "user:max" in users and users == sorted(users) and all(u.startswith("user:") for u in users)  # no role, group or policy
+    assert not any(u.startswith(("role:", "group:", "policy:")) for u in users) and len(users) > 20
+    err(api.get("/v1/scenarios/s99/users"), 404, "NOT_FOUND")
+    err(api.get("/v1/scenarios/..%2Fx/users"), 404, "NOT_FOUND")
+
+
 def test_load_s2_returns_the_counts(api):
     assert api.post("/v1/scenarios/s2/load").json() == {"graph": "t:s2:baseline", "nodes": 142, "edges": 179, "needs": 23}
 

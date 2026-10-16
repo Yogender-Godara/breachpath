@@ -36,7 +36,7 @@ def fast_state(sid, src):
 
 @pytest.fixture(scope="module")
 def states(falkordb):
-    return {"s2": fast_state("s2", "user:ravi"), "s5": fast_state("s5", "user:zoe")}
+    return {"s2": fast_state("s2", "user:ravi"), "s5": fast_state("s5", "user:zoe"), "s8": fast_state("s8", "user:max")}
 
 
 @pytest.fixture
@@ -207,8 +207,33 @@ def test_unicode_hyphens_are_normalised_before_the_guard_and_the_returned_text_i
 
 # --- the fact guard ---
 
+def test_the_alternatives_are_in_the_slice_and_the_template_names_them(states):
+    s8 = states["s8"]
+    alt, = slice_of(s8)["plan"]["alternatives"]
+    assert alt["cut_eids"] == ["e:s8:07"] and alt["collateral"] == {"count": 12, "weighted": 12} and slice_of(states["s5"])["plan"]["alternatives"] == []
+    assert len(reporter._dump(slice_of(states["s2"]))) < 6000
+    assert reporter.check(template(s8), slice_of(s8)) == []  # the template's alternative line only uses eids and numbers of the slice
+    # an eid the model invents for an alternative is caught like any other
+    assert any("e:s8:99" in p for p in reporter.check(template(s8).replace("e:s8:07", "e:s8:99"), slice_of(s8)))
+
+
+def test_the_fix_section_must_name_each_alternative_the_plan_considered(states, monkeypatch):
+    s8 = copy.deepcopy(states["s8"])
+    good = template(s8)
+    fix = good.split("## Fix")[1].split("## Proof")[0]
+    without = good.replace(fix, "\n- Edit the role's trust policy: e:s8:05 has zero collateral.\n\n")
+    problems = reporter.check(without, slice_of(s8))
+    assert len(problems) == 1 and "alternative e:s8:07" in problems[0] and "collateral 12, weighted 12" in problems[0]
+    witness_only = good.replace(fix, "\n- Edit the role's trust policy: e:s8:05 cuts e:s8:01, e:s8:05, e:s8:06, e:s8:07 and has zero collateral.\n\n")
+    assert any("alternative e:s8:07" in p for p in reporter.check(witness_only, slice_of(s8)))  # e:s8:07 is on the witness path: not a comparison
+    gateway = Gateway(monkeypatch, say(without), say(good))  # the retry message carries the problem; the second answer names the alternative
+    assert reporter.write(s8) == (good, False) and "alternative e:s8:07" in gateway.calls[1]["messages"][-1]["content"]
+    s5 = copy.deepcopy(states["s5"])  # no alternatives (nothing was simulated): nothing is required
+    assert reporter.check(template(s5), slice_of(s5)) == []
+
+
 def test_the_s2_and_s5_templates_pass_the_guard(states):
-    for sid in ("s2", "s5"):
+    for sid in ("s2", "s5", "s8"):
         assert reporter.check(template(states[sid]), slice_of(states[sid])) == [], sid
     assert "not assessed" in template(states["s5"]).lower().split("## business impact")[1]  # no collateral analysis for S5: the template says so
 

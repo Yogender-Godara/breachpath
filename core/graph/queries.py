@@ -127,6 +127,11 @@ RETURN r.eid AS eid, a.id AS u, b.id AS v, r.cap AS cap, r.kind AS kind,
        r.last_used_days AS stale_days
 """)
 
+# The users of a graph (the UI's src dropdown: a src must be a User)
+USER_IDS = """
+MATCH (u:User) RETURN u.id AS id ORDER BY u.id
+"""
+
 # Node rows for the UI sub-graph (GET /incidents/{id}/graph)
 GRAPH_NODES = """
 MATCH (n:Asset) RETURN n.id AS id, labels(n) AS labels, n.name AS name, coalesce(n.crown_jewel, false) AS crown_jewel

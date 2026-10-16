@@ -66,7 +66,11 @@ def sidebar():
             except ApiError as e:
                 st.error(f"{e.code}: {e.message}")
         default_src = next(s["src"] for s in items if s["id"] == sid)
-        src = st.selectbox("Src identity", [default_src], accept_new_options=True, key=f"src-{sid}")
+        try:
+            users = api.users(sid)
+        except ApiError:  # not loaded yet: only the scenario's own src is known
+            users = []
+        src = st.selectbox("Src identity", view.src_options(default_src, users), key=f"src-{sid}")
         token = st.text_input("Demo token", type="password", help="Agent mode needs the demo token (the API's DEMO_TOKEN)")
         if not token:
             st.session_state["mode"] = "Fast"
@@ -147,6 +151,10 @@ def fix_tab(run):
         st.dataframe(view.cut_rows(plan), hide_index=True, width="stretch")
         for eid, reason in view.reason_lines(plan):  # wrapped text: a table cell would cut it
             st.markdown(f"**{eid}**: {reason}")
+        if view.alternative_rows(plan):
+            st.subheader("Alternatives considered")
+            st.markdown(view.tradeoff(plan))
+            st.dataframe(view.alternative_rows(plan), hide_index=True, width="stretch")
         st.caption(plan["notes"])
     else:
         st.write("No automatic fix was applied. " + plan["notes"])

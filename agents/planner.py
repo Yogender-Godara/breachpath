@@ -128,6 +128,7 @@ async def plan(session, state, *, lock_token, emit=None):
     chosen = names[0] if names else "custom"  # the code sets the label: the cut equals a min-cut candidate, or it is the Planner's own
     plan_ = {"cut_eids": list(key), "chosen": chosen, "source": "planner", "reasons": reasons, "safe": True, "max_flow": max_flow,
              "witness": {e: witness.get(e, []) for e in key}, "simulation": sims[key], "suggestion": None,
+             "alternatives": fast_brains.alternatives_ranked(sims, key, {sim_key(c["eids"]): c["name"] for c in cut["candidates"]}),
              "notes": f"{llm.notes.strip()} size {len(key)} vs minimum {max_flow}.".strip()}
     _plan_event(emit, plan_, True, llm, result, sims)
     return plan_, False
