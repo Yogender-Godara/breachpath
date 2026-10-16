@@ -42,13 +42,14 @@ def check(client, sid):
     """Returns (row, failures). row is a dict for the table, failures a list of strings (empty = pass)."""
     key = json.loads((ANSWER_DIR / f"{sid}.json").read_text(encoding="utf-8"))
     failures = []
-    row = {"sid": sid, "status": "-", "jewels": "-", "paths": "-", "cut": "-", "proof": "-", "needs": "-", "collateral": "-", "ms": "-"}
+    row = {"sid": sid, "status": "-", "jewels": "-", "paths": "-", "cut": "-", "proof": "-", "needs": "-", "collateral": "-", "ms": "-", "incident_id": None}
 
     loaded = client.post(f"/v1/scenarios/{sid}/load")
     resp = client.post("/v1/analyze", json={"tenant": sid, "src": key["src"]}) if loaded.status_code == 200 else loaded
     if resp.status_code != 200:
         return row, [f"HTTP {resp.status_code}: {resp.text[:300]}"]
     body = resp.json()
+    row["incident_id"] = body["incident_id"]  # main() looks for leftovers of THESE incidents only
     findings, plan, verdict, action = body["findings"], body["plan"], body["verdict"], body["action"]
     if findings is None or plan is None:  # the pipeline stopped early: say why instead of crashing
         row["status"] = body["status"]
@@ -125,19 +126,22 @@ def check(client, sid):
 
 
 def main(ids):
+    config.RATE_LIMIT_PER_MIN = 10**6  # this is a checker, not a load test: /analyze is rate-limited per IP otherwise
     client = TestClient(app)
     cols = ["sid", "status", "jewels", "paths", "cut", "proof", "needs", "collateral", "ms"]
     print("sid | status | jewels | paths found/true | cut size/min | maxflow, bfs | needs ok | collateral | ms | result")
-    failed = 0
+    failed, made = 0, []
     for sid in ids:
         row, failures = check(client, sid)
+        made.append(row["incident_id"])
         print(" | ".join(str(row[c]) for c in cols), "|", "FAIL" if failures else "PASS")
         for f in failures:
             print(f"    - {f}")
         failed += bool(failures)
-    leftovers = [g for g in get_db().list_graphs() if ":sbx:" in g]
+    # only the incidents of THIS run: agent sandboxes of other incidents are kept on purpose (the worker's janitor removes them after 24 h)
+    leftovers = [g for g in get_db().list_graphs() if any(f":sbx:{i}" in g for i in made if i)]
     if leftovers:
-        print(f"LEFTOVER sandbox graphs: {leftovers}")
+        print(f"LEFTOVER sandbox graphs of this run: {leftovers}")
     print(f"{len(ids) - failed}/{len(ids)} scenarios pass")
     return 1 if failed or leftovers else 0
 

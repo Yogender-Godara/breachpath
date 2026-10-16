@@ -26,11 +26,11 @@
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
 | P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
 | P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
-| P9 Hardening and deploy | Day 3 | 🟨 | 5 / 16 |
+| P9 Hardening and deploy | Day 3 | 🟨 | 13 / 16 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **164 / 214** |
+| **Total** | | | **172 / 214** |
 
-**Now working on:** P9.1 Security controls
+**Now working on:** P9.4 deploy decision (you), then P10.1 README
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -448,25 +448,25 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** a live S8 + "Do not change anything between user:max and the reports database." ends NOT_HONOURED with few Planner calls (target ≤ 7) and ≤ 6 simulations (never FAILED); a scenario with one verified option (S3) makes 0 Planner calls; S8 without an instruction still lets the LLM choose.
 
-### P9.1 Security controls ⬜ 🤖
-- [ ] Only `ui` publishes a port; `api` and `falkordb` use `expose` ([HLD §11.1](docs/02_HLD.md))
-- [ ] FalkorDB password, RO queries, timeouts
-- [ ] Demo token + rate limit + max 2 concurrent agent incidents
-- [ ] Secrets only in `.env`; nothing secret in logs
+### P9.1 Security controls ✅ 🤖
+- [x] Only `ui` publishes a port; `api` and `falkordb` use `expose` ([HLD §11.1](docs/02_HLD.md)): `scripts/port_check.py` on the stack started WITHOUT the dev file: only 8501 answers; `tests/test_compose.py`
+- [x] FalkorDB password (`requirepass`), RO queries (`ro_query`), timeouts (`QUERY_TIMEOUT_MS`): already enforced, confirmed ([VERIFY_RESULTS](docs/VERIFY_RESULTS.md))
+- [x] Demo token + rate limit + max 2 concurrent agent incidents; `/analyze` is now rate-limited per IP too
+- [x] Secrets only in `.env`; nothing secret in logs: `gsk_`, `sk-or-` and the `DEMO_TOKEN` value: 0 hits in the logs of all 4 services after a fast and an agent incident
 
-**Done when:** a port scan of the compose host shows only the UI port.
+**Done when:** a port scan of the compose host shows only the UI port. ✅ (WSL and Windows host)
 
-### P9.2 Compose and reliability ⬜ 🤖
-- [ ] Final `docker-compose.yml`: 4 services, healthchecks, `restart: unless-stopped`, volume
-- [ ] Fresh-clone test: `docker compose up` works on a clean checkout (AC-8)
-- [ ] Light chaos test: kill the worker mid-run; remove the API keys → degraded run still finishes (AC-6)
+### P9.2 Compose and reliability ✅ 🤖
+- [x] Final `docker-compose.yml`: 4 services, healthchecks (api `/readyz`, ui `/_stcore/health`, worker liveness key), `restart: unless-stopped`, `falkordb-data` volume, `UI_PORT`
+- [x] Fresh-clone test: `docker compose up` works on a clean checkout (AC-8): 4/4 healthy, S2 `/analyze`, agent incident DONE
+- [x] Light chaos test: crash the worker mid-run (PLANNING) → Docker restarts it → the incident resumes and is DONE; no API keys → the agent incident is DONE with `degraded=True` (AC-6)
 
-**Done when:** all three pass.
+**Done when:** all three pass. ✅
 
-### P9.3 Latency measurement ⬜ 🤖
-- [ ] Measure NFR-L1 … L5 and record the real numbers for the README
+### P9.3 Latency measurement ✅ 🤖
+- [x] Measure NFR-L1 … L5 (`scripts/latency.py`) and record the real numbers for the README ([VERIFY_RESULTS](docs/VERIFY_RESULTS.md): L1 p95 12 ms, L2 p95 112 ms, L3 p50 65 ms, L5 p50 12 ms met; L4 p50 3.8 s with cached LLM, 105 s for one real rate-limited run: not met)
 
-**Done when:** the numbers are recorded (whatever they are).
+**Done when:** the numbers are recorded (whatever they are). ✅
 
 ### P9.4 Free deployment (optional) ⬜ 🤖 + 👤
 - [ ] Shortlist free platforms. Check **private networking** (only the UI public) and the current free-tier limits.
@@ -516,6 +516,11 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 16 | Rate limit on `/analyze` (P9.1) | only `POST /incidents` was limited → `POST /analyze` too, same `RATE_LIMIT_PER_MIN` per client IP, but its OWN counter (`ratelimit:{scope}:{ip}:{minute}`, helper `api/checks.rate_limit`) | HLD 11: "fast mode is open but rate-limited". Separate counters so fast clicks never use up the agent budget. Behind the UI all users share the UI container's IP (limit 10/min for everybody): raise `RATE_LIMIT_PER_MIN` for a public demo | Yes (LLD §8, §12) |
+| Oct 16 | Compose health and start order (P9.2) | no healthchecks for api/worker/ui, `ui` started after `api` → healthchecks with `python -c urllib` (no curl in the slim image): api `/readyz`, ui `/_stcore/health`, worker = some `worker:alive:*` key exists (the worker SETs it with a 60 s TTL on every loop turn and every 15 s during a job); `ui` waits for `api: service_healthy`; ui port `${UI_PORT:-8501}` | AC-8 needs a stack that says when it is ready; the fresh-clone test used `UI_PORT=8601` next to the main stack | Yes (LLD §8) |
+| Oct 16 | Worker resume after a crash (P9.2) | the restarted worker read its un-acked job once and forgot it if the dead worker's lock (60 s) was still held → `resume_pending` retries every 2 s for `LOCK_TTL_MS` + 5 s; `NOGROUP` (jobs stream deleted) creates the group again instead of crashing; the worker emits "worker picked up the incident" first | The chaos test would have left the incident stuck. The first event used to wait for the MCP subprocess start (L3 p50 1.4 s, now 65 ms). Docker note: `docker kill` is a manual stop and `unless-stopped` does NOT restart it; an OOM crash is restarted | Yes (LLD §8, failure table) |
+| Oct 16 | Kept sandboxes are trimmed (P9.3) | kept agent sandboxes lived 24 h and counted toward `MAX_GRAPHS` 20 → after ~8 agent incidents every new one FAILED (`LIMIT_EXCEEDED: 20 graphs exist`); now the worker keeps the newest `MAX_KEPT_SANDBOXES` = 6 and deletes older ones before each job (never a baseline, never an active incident's) | Found by the latency run | Yes (LLD §12) |
+| Oct 16 | `check_fast_mode` leftovers (P9) | flagged every `:sbx:` graph → only the sandboxes of the incidents THIS run created (ids from the responses) | agent sandboxes of other incidents are kept on purpose (the janitor removes them after 24 h): a false FAIL | n/a (script) |
 | Oct 16 | Simulations reserved for the code (P9.0) | `MAX_SIMULATIONS` 6 shared by everyone → the LLM (MCP `simulate_cut` and constrained `compute_min_cut`, called with `llm=True`) may use `MAX_SIMULATIONS - SIMS_RESERVED_FOR_CODE` = 4; over that the tool returns `LIMIT_EXCEEDED`; the code's own calls use the full 6; a refused call gives its counter number back | A live S8 run with an instruction used 6/6: one more constrained cut would have made the code fallback (2 candidates) fail → FAILED instead of a safe result. The tool description is unchanged (it is part of the LLM cache key) | Yes (LLD §6.2, §12) |
 | Oct 16 | Planner skip rule (P9.0) | The Planner LLM ran for every safe cut → with NO operator instruction and ONE verified option (the 2 min-cut candidates are the same set, or only one passes `simulate_cut`) the code plan is used: `source: code`, 0 LLM calls, event "planner skipped: one verified option". The code simulates each distinct candidate once and the LLM reuses the results. With an instruction, or 2 different verified candidates, the LLM runs | The LLM cannot choose between anything there. Measured on the 8 scenarios: only S3 (both candidates are `e:s3:02`) skips; S5 already made no call (unsafe); S1, S2, S4, S6, S7, S8 have two different verified candidates | Yes (LLD §6.2) |
 | Oct 16 | LLM budget per incident (P9.0) | No limit (a live run made 18 Planner calls in 4 minutes) → `LLM_MAX_CALLS_PER_INCIDENT` (default 20) counted in `state["llm_calls"]` over ALL agents and provider restarts (cached answers and failed attempts count, so the limit does not depend on the cache); used up → `run_agent` returns `degraded=True`, reason "LLM budget for this incident used up", no provider restart, the code decides; the Reporter counts too (template when used up) | Free tiers (Groq rate limits, OpenRouter 50/day): a runaway model must have a hard cost ceiling | Yes (LLD §12) |

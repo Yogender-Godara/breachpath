@@ -655,7 +655,8 @@ save state after EVERY step (checkpoint) + emit event
 | `idem:{key}` | String (JSON) | `{incident_id, hash}` (hash of the request body) | 24 h |
 | `active:{scenario}` | Set | ids of incidents running on that scenario (fast and agent). Blocks a reload (409). Removed in `finally` / by the worker; the set expires after 1 h as a safety net | 1 h |
 | `active:agent` | Set | ids of active agent-mode incidents (for `429 BUSY`) | 1 h |
-| `ratelimit:{ip}:{minute}` | String (counter) | `POST /incidents` calls in that minute | 60 s |
+| `ratelimit:{scope}:{ip}:{minute}` | String (counter) | calls in that minute; scope `incidents` (`POST /incidents`) or `analyze` (`POST /analyze`, P9.1: fast mode is open but rate-limited too) | 60 s |
+| `worker:alive:{consumer}` | String (unix time) | liveness: the worker SETs it on every loop turn and every 15 s while a job runs; the compose healthcheck is "some such key exists" (P9.2) | 60 s |
 | `sbx:expiry` | Sorted set | sandbox name → expiry time | — |
 
 **Event:**
@@ -674,7 +675,7 @@ The heartbeat thread is stopped in `finally`, and the lock is deleted only if it
 
 **Janitor:** at worker start and every 10 minutes, every sandbox in `sbx:expiry` whose time has passed is deleted (`GRAPH.DELETE`, its `reach:{sandbox}:*` keys too, then `ZREM`). A name that is not a sandbox name (`schema.is_sandbox`) is never deleted, only removed from the set.
 
-**Worker (P6.6, `worker/main.py`):** a plain sync loop. At start it creates the group (`XGROUP CREATE jobs workers $ MKSTREAM`, `orchestrator/jobs.ensure_group`; the API calls it too before `XADD`, so a job added before the first worker start is not lost), reads its own un-acked jobs first (once each), then `XREADGROUP ... BLOCK 5000`. Per job: load the state (missing → ACK and drop; already terminal → ACK), take the incident lock (`LockBusy` → leave the job un-acked), run `run_incident(state, "agent", lock_token=..., lock=lock)`, then in `finally` `SREM` the id from `active:{tenant}` and `active:agent` and `XACK`. The agent sandbox is KEPT (the UI may show it; the janitor removes it after `SANDBOX_TTL_HOURS`). A job read again resumes from its saved status (`run_incident` loops on `state["status"]`). Between two pipeline steps the pipeline checks `lock.lost`: if the heartbeat lost the lock the incident ends `FAILED` with `failure_detail "lock lost"`. SIGTERM/SIGINT finish the current job and exit. One log line per job (id, final status, ms, degraded). `XAUTOCLAIM` of other workers' jobs stays cut (one worker).
+**Worker (P6.6, `worker/main.py`):** a plain sync loop. At start it creates the group (`XGROUP CREATE jobs workers $ MKSTREAM`, `orchestrator/jobs.ensure_group`; the API calls it too before `XADD`, so a job added before the first worker start is not lost), reads its own un-acked jobs first (`resume_pending`, P9.2: a job whose lock is still held by the crashed worker is retried every 2 s for up to `LOCK_TTL_MS` + 5 s, so the incident resumes about one lock TTL after the crash instead of being forgotten until the next restart), then `XREADGROUP ... BLOCK 5000` (a deleted stream or group, `NOGROUP`, is created again instead of crashing the worker). The consumer name is `<hostname>-<pid>`: `restart: unless-stopped` restarts the SAME container (same hostname, PID 1), so the restarted worker is the same consumer and sees its own pending job. A manual `docker kill` / `docker stop` is NOT restarted by `unless-stopped` (Docker treats it as a manual stop): use `docker start`; a real crash (OOM kill) is restarted by Docker. Per job: load the state (missing → ACK and drop; already terminal → ACK), take the incident lock (`LockBusy` → leave the job un-acked), run `run_incident(state, "agent", lock_token=..., lock=lock)`, then in `finally` `SREM` the id from `active:{tenant}` and `active:agent` and `XACK`. The agent sandbox is KEPT (the UI may show it; the janitor removes it after `SANDBOX_TTL_HOURS`). A job read again resumes from its saved status (`run_incident` loops on `state["status"]`). Between two pipeline steps the pipeline checks `lock.lost`: if the heartbeat lost the lock the incident ends `FAILED` with `failure_detail "lock lost"`. SIGTERM/SIGINT finish the current job and exit. One log line per job (id, final status, ms, degraded). `XAUTOCLAIM` of other workers' jobs stays cut (one worker).
 
 ---
 
@@ -863,6 +864,7 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | `COLLATERAL_RECENT_DAYS` | `90` | A lost pair counts as "recent" (weight 3) if every edge on a path that gave the access was used within this many days |
 | `MAX_SANDBOXES` | `3` | Sandboxes (incl. `-split`) per incident |
 | `MAX_GRAPHS` | `20` | Graphs in FalkorDB in total |
+| `MAX_KEPT_SANDBOXES` | `6` | Agent sandboxes kept for the UI: before each job the worker deletes the older ones (never a baseline, never an active incident's). Without it ~10 kept sandboxes + 8 baselines hit `MAX_GRAPHS` and every new incident FAILED (P9.3) |
 | `MAX_ATTEMPTS` | `3` | Fix-verify loop limit |
 | `QUERY_TIMEOUT_MS` | `2000` | Per-query timeout |
 | `SANDBOX_TTL_HOURS` | `24` | Sandbox cleanup |
@@ -870,7 +872,7 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | `MCP_PROFILE` | `full` | `full` or `readonly` |
 | `LOCK_TTL_MS` / `LOCK_HEARTBEAT_S` | `60000` / `15` | Incident lock TTL and heartbeat interval |
 | `DEMO_TOKEN` | — | Header `X-Demo-Token` required by `POST /incidents` (agent mode). Empty = agent mode disabled |
-| `RATE_LIMIT_PER_MIN` | `10` | `POST /incidents` per client IP per minute |
+| `RATE_LIMIT_PER_MIN` | `10` | `POST /incidents` and, counted separately, `POST /analyze` per client IP per minute (`api/checks.rate_limit`; behind the UI all users share the UI container's IP) |
 | `MAX_ACTIVE_AGENT` | `2` | Active agent-mode incidents before `429 BUSY` |
 
 ---
@@ -888,7 +890,7 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | Invalid agent output | Agent loop | One retry with the validation error → degrade |
 | Plan names a protected or missing eid | Executor | Reject → Planner retry with the reason |
 | Proof mismatch (A ≠ B) | Verifier | `pass=false` + `failure_detail="proof mismatch"` → visible in UI and logs |
-| Worker dies | Worker | Lock expires → `XAUTOCLAIM` → resume from status |
+| Worker dies | Worker | Docker restarts it (same consumer) → `resume_pending` waits for the dead worker's lock to expire (≤ 65 s) → resume from the saved status. `XAUTOCLAIM` (another consumer) stays cut. Measured in P9.2: S2 crashed at PLANNING, DONE after 65 s |
 | Sandbox already exists | Executor | Reuse it (idempotent). On a retry, reset it. |
 
 ---

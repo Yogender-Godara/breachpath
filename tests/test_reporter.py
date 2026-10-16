@@ -163,6 +163,7 @@ def test_host_action_only_on_a_removed_edge_that_is_a_host_action(s2, states):
     rotation = reporter.check(good + "\n- Rotate the leaked credential of user:ravi (a host action).\n", slice_)
     assert len(rotation) == 1 and "never to rotating a credential" in rotation[0]
     assert reporter.check(good + "\nThe host actions below are recommendations, not done.\n", slice_) == []  # a general sentence is fine
+    assert reporter.check(good.replace("Detach the policy:", "Detach the policy (not a host action):"), slice_) == []  # saying an edge is NOT one is correct (live S2 report)
     s8 = states["s8"]  # S8 removes an IAM edge only: no host action exists, so the words must not appear at all
     assert reporter.check(template(s8), slice_of(s8)) == []
     assert any("none was removed here" in p for p in reporter.check(template(s8) + "\nThe host actions are pending.\n", slice_of(s8)))

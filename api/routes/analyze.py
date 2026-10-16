@@ -1,9 +1,9 @@
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from api.checks import check_target
+from api.checks import check_target, rate_limit
 from api.graph_view import build_view
 from api.routes.scenarios import ACTIVE_TTL_S
 from core.graph.client import get_db
@@ -30,8 +30,9 @@ def timings(events, total_ms):
 
 
 @router.post("/analyze")
-def analyze(body: AnalyzeBody):
-    """Fast mode, synchronous: the whole pipeline runs inside this request, in memory."""
+def analyze(body: AnalyzeBody, request: Request):
+    """Fast mode, synchronous: the whole pipeline runs inside this request, in memory. Open (no token) but rate-limited per IP."""
+    rate_limit(get_db().connection, request, "analyze")
     check_target(body.tenant, body.src)
     state, sink = new_state(body.tenant, body.src, "fast"), []
     redis, active = get_db().connection, f"active:{body.tenant}"

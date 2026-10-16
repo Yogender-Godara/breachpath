@@ -36,7 +36,7 @@ HEADING = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*(.+?)[*_`]*[ \t]*$", re.MULTILINE)
 IMPACT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Business impact.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
 FIX = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Fix\b.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
 NEXT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Next steps\b.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
-HOST_ACTION = re.compile(r"host[ -]actions?", re.IGNORECASE)
+HOST_ACTION = re.compile(r"(?<!not a )(?<!not an )(?<!no )(?<!non-)host[ -]actions?", re.IGNORECASE)  # "(not a host action)" is a correct statement
 NO_PROVEN = re.compile(r"\bno\s+(?:proven|verified)\b", re.IGNORECASE)  # "no proven fix": wrong when the applied fix WAS verified
 # Names of the JSON the model was given: a manager must never read them ("plan.avoid", "suggestion.proven", "default_fix"...).
 INTERNAL = re.compile(r"\b(?:(?:plan|suggestion|verdict|findings|action|instruction|simulation|collateral)\.[a-z_]+"

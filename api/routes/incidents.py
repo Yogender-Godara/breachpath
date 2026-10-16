@@ -1,7 +1,6 @@
 import hashlib
 import json
 import secrets
-import time
 
 from typing import Literal
 
@@ -9,7 +8,7 @@ from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.checks import check_target
+from api.checks import check_target, rate_limit
 from api.errors import ApiError
 from api.graph_view import build_view
 from api.routes.scenarios import ACTIVE_TTL_S
@@ -32,21 +31,13 @@ class IncidentBody(BaseModel):
     instructions: str | None = Field(None, max_length=500)  # agent mode: an operator instruction in free text (/analyze ignores it)
 
 
-def _rate_limit(redis, ip):
-    key = f"ratelimit:{ip}:{int(time.time() // 60)}"  # the client IP as the server sees it (behind a proxy this is the proxy's)
-    count = redis.incr(key)
-    redis.expire(key, 60)
-    if count > config.RATE_LIMIT_PER_MIN:
-        raise ApiError(429, "RATE_LIMITED", f"more than {config.RATE_LIMIT_PER_MIN} requests per minute")
-
-
 @router.post("/incidents", status_code=202)
 def create_incident(body: IncidentBody, request: Request, x_demo_token: str | None = Header(None),
                     idempotency_key: str | None = Header(None)):
     redis = get_db().connection
     if not (config.DEMO_TOKEN and x_demo_token and secrets.compare_digest(x_demo_token, config.DEMO_TOKEN)):
         raise ApiError(403, "FORBIDDEN", "agent mode needs a valid X-Demo-Token header")
-    _rate_limit(redis, request.client.host if request.client else "unknown")
+    rate_limit(redis, request, "incidents")
     if body.mode == "fast":
         raise ApiError(400, "BAD_INPUT", "fast mode runs synchronously: use POST /v1/analyze")
     check_target(body.tenant, body.src)

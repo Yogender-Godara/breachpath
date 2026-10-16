@@ -14,6 +14,7 @@ MAX_SIMULATIONS = int(os.getenv("MAX_SIMULATIONS", "6"))
 SIMS_RESERVED_FOR_CODE = int(os.getenv("SIMS_RESERVED_FOR_CODE", "2"))  # the code fallback needs up to 2 (the two candidates): the LLM never uses them
 MAX_SANDBOXES = int(os.getenv("MAX_SANDBOXES", "3"))
 MAX_GRAPHS = int(os.getenv("MAX_GRAPHS", "20"))
+MAX_KEPT_SANDBOXES = int(os.getenv("MAX_KEPT_SANDBOXES", "6"))  # agent sandboxes kept for the UI: the worker deletes older ones before a job
 SANDBOX_TTL_HOURS = int(os.getenv("SANDBOX_TTL_HOURS", "24"))
 COLLATERAL_RECENT_DAYS = int(os.getenv("COLLATERAL_RECENT_DAYS", "90"))
 # LLM (the provider key and the model ids are read by agents/llm_gateway.py)

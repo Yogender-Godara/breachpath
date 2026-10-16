@@ -2,6 +2,7 @@
 The live tests at the end run the whole path API -> jobs -> worker -> agents -> events on the real LLMs (-m live)."""
 import json
 import os
+import threading
 import time
 
 import pytest
@@ -80,6 +81,8 @@ def test_a_job_is_consumed_the_incident_is_done_and_everything_is_cleaned_up(str
     assert not redis.exists(f"lock:inc:{state['id']}")
     assert saved["sandbox_graph"] in client.get_db().list_graphs()  # the agent sandbox is kept (the janitor removes it later)
     assert [e["type"] for _, e in events.read(state["id"])][-1] == "report"  # the pipeline wrote its events to the incident's stream
+    first = events.read(state["id"])[0][1]  # NFR-L3: something is visible at once, before the first MCP session even starts
+    assert (first["agent"], first["type"], first["msg"]) == ("orchestrator", "step", "worker picked up the incident (status QUEUED)")
     assert worker.process_one(redis, CONSUMER, block_ms=200) is None  # nothing left
 
 
@@ -120,6 +123,115 @@ def test_a_crashed_run_resumes_from_its_saved_status(stream, fast_agents):
     assert state_store.load(state["id"])["status"] == "INVESTIGATING"
     worker.handle(redis, "0-0", state["id"])  # the job is read again: the saved status INVESTIGATING is where it continues
     assert state_store.load(state["id"])["status"] == "DONE"  # run_incident loops on the saved status
+
+
+def test_resume_pending_waits_for_a_crashed_workers_lock_to_expire_then_runs_the_job(stream, fast_agents):
+    """The real chaos case: the worker is killed, the container restarts in a second, but the dead worker's lock lives for LOCK_TTL_MS."""
+    redis, made = stream
+    state = enqueue(redis, made)
+    redis.xreadgroup(GROUP, CONSUMER, {STREAM: ">"}, count=1)  # this consumer read the job and then "died" before acking
+    assert pending(redis) == 1
+    redis.set(f"lock:inc:{state['id']}", "dead-worker", px=1500)  # nobody extends it any more
+    ran = worker.resume_pending(redis, CONSUMER, wait_s=10, pause_s=0.5)
+    assert ran == [state["id"]] and state_store.load(state["id"])["status"] == "DONE" and pending(redis) == 0
+
+
+def test_resume_pending_gives_up_after_wait_s_and_leaves_the_job_unacked(stream, fast_agents):
+    redis, made = stream
+    state = enqueue(redis, made)
+    redis.xreadgroup(GROUP, CONSUMER, {STREAM: ">"}, count=1)
+    redis.set(f"lock:inc:{state['id']}", "alive-worker", px=30000)
+    try:
+        assert worker.resume_pending(redis, CONSUMER, wait_s=1, pause_s=0.3) == [] and pending(redis) == 1
+        assert state_store.load(state["id"])["status"] == "QUEUED"
+    finally:
+        redis.delete(f"lock:inc:{state['id']}")
+
+
+def test_the_loop_survives_a_deleted_jobs_stream(falkordb, monkeypatch):
+    """The worker used to crash with NOGROUP when the stream disappeared (the restart policy then hid it). It creates the group again and goes on."""
+    redis = client.get_db().connection
+    redis.delete(STREAM)
+    calls, stop = [], threading.Event()
+
+    def fake_process_one(r, consumer, **kw):
+        calls.append(1)
+        if len(calls) == 1:
+            r.xreadgroup(GROUP, consumer, {STREAM: ">"}, count=1)  # raises NOGROUP, like the real call
+        else:
+            stop.set()
+    monkeypatch.setattr(worker, "process_one", fake_process_one)
+    try:
+        worker.loop(redis, "p92-nogroup", stop)
+        assert len(calls) == 2 and redis.exists(STREAM)  # the group exists again
+    finally:
+        redis.delete(STREAM, f"{worker.ALIVE_PREFIX}p92-nogroup")
+
+
+# --- liveness (the compose healthcheck asks whether any worker:alive:* key exists) ---
+
+def test_the_liveness_key_has_a_60_second_ttl_and_the_check_command_sees_it(falkordb):
+    redis = client.get_db().connection
+    for key in redis.keys(f"{worker.ALIVE_PREFIX}*"):
+        redis.delete(key)
+    try:
+        assert not redis.keys(f"{worker.ALIVE_PREFIX}*")  # no worker: the healthcheck would fail
+        worker.beat(redis, "p92-consumer")
+        assert redis.keys(f"{worker.ALIVE_PREFIX}*") == [f"{worker.ALIVE_PREFIX}p92-consumer"]
+        assert 0 < redis.ttl(f"{worker.ALIVE_PREFIX}p92-consumer") <= 60 == worker.ALIVE_TTL_S
+        assert worker.ALIVE_EVERY_S < worker.ALIVE_TTL_S  # a long job refreshes it before it expires
+    finally:
+        redis.delete(f"{worker.ALIVE_PREFIX}p92-consumer")
+
+
+def test_a_running_job_keeps_refreshing_the_liveness_key(stream, fast_agents, monkeypatch):
+    redis, made = stream
+    key = f"{worker.ALIVE_PREFIX}p92-job"
+    redis.delete(key)
+    monkeypatch.setattr(worker, "ALIVE_EVERY_S", 0.1)  # a job longer than the 60 s TTL must not look dead
+    real, seen = worker.run_incident, []
+
+    def slow_job(*args, **kwargs):
+        redis.delete(key)
+        time.sleep(0.6)
+        seen.append(bool(redis.exists(key)))  # the keep-alive thread set it again while the job was running
+        return real(*args, **kwargs)
+    monkeypatch.setattr(worker, "run_incident", slow_job)
+    try:
+        enqueue(redis, made)
+        worker.process_one(redis, "p92-job", block_ms=1000)
+        assert seen == [True]
+    finally:
+        redis.delete(key)
+
+
+def test_trim_keeps_the_newest_sandboxes_and_never_deletes_an_active_one_or_a_baseline(falkordb):
+    """Kept agent sandboxes count toward MAX_GRAPHS: before a job the worker deletes the oldest ones (P9.3: 20 graphs reached -> every incident FAILED)."""
+    redis = client.get_db().connection
+    saved = redis.zrange("sbx:expiry", 0, -1, withscores=True)  # the real entries stay untouched: this test works on its own zset
+    redis.delete("sbx:expiry")
+    names = [f"t:s2:sbx:p92t{i}" for i in range(5)]
+    baseline = baseline_name("s2")
+    loader.load_scenario("s2")
+    try:
+        for name in names:
+            client.get_graph(name).query("CREATE (:X {id: 'x'})")
+        now = time.time()
+        redis.zadd("sbx:expiry", {baseline: now - 1000, **{n: now + 100 + i for i, n in enumerate(names)}})  # the oldest entry is a baseline put in by mistake
+        redis.sadd("active:p92trim", "p92t0")  # the oldest sandbox belongs to a running incident
+        gone = worker.trim_sandboxes(redis, keep=2)
+        graphs = client.get_db().list_graphs()
+        assert gone == [names[1], names[2]]  # the 2 newest (p92t3, p92t4) stay; the baseline and the active p92t0 are skipped
+        assert all(n not in graphs for n in gone) and names[0] in graphs and names[3] in graphs and names[4] in graphs and baseline in graphs
+        assert [n for n in redis.zrange("sbx:expiry", 0, -1)] == [baseline, names[0], names[3], names[4]]
+        assert worker.trim_sandboxes(redis, keep=10) == []  # under the limit: nothing happens
+    finally:
+        redis.srem("active:p92trim", "p92t0")
+        redis.delete("sbx:expiry", "active:p92trim")
+        for name in names:
+            client.delete_graph(name)
+        if saved:
+            redis.zadd("sbx:expiry", {n: s for n, s in saved})
 
 
 # --- the janitor ---

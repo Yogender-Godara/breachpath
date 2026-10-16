@@ -141,3 +141,53 @@ Results (best run per model; "rate limited" = upstream 429, not a model failure)
 Direct OpenRouter check (live tests in `tests/test_llm_gateway.py`, header `X-Title: BreachPath`): 1st call 3433 ms (tool call returned), the identical 2nd call 0 ms (`cached=True`), and a bad `OPENROUTER_API_KEY` gives `LLMUnavailable` ("provider rejected the call: AuthenticationError 401") without a retry.
 
 **Groq limits (response headers, 2026-10-15):** `x-ratelimit-limit-requests: 1000` (per day), `x-ratelimit-limit-tokens: 8000` (per minute; resets in seconds). **Chosen Groq models:** Investigator and Planner `openai/gpt-oss-120b` (about 0.7 s per call), Reporter `openai/gpt-oss-120b` since P7.1 (the 20B ignored prompt rules the guard can't check; about 0.5 s was the 20B's latency). Because Groq does not return parallel calls, an agent makes one tool call per turn (the S2 dummy agent needed 5 turns, about 4.5 s in all, against 3 turns and about 26 s on OpenRouter): watch `max_turns` for the Planner (one `simulate_cut` per candidate) and the 8000 tokens/minute limit (one dummy run used about 5400 tokens). **Provider order (P6.2 follow-up):** `LLM_PROVIDERS=groq,openrouter`; a run that finds its provider unavailable restarts on the next one (D18).
+
+## P9.1 / P9.2 / P9.3 Hardening, reliability and latency (2026-10-16, measured, nothing estimated)
+
+**Port check (P9.1).** `docker compose -f docker-compose.yml up -d --build` (NO dev file), then `python scripts/port_check.py` from the WSL host and from Windows (plain socket connects):
+
+| port | service | expected | answers |
+|---|---|---|---|
+| 8501 | ui | open | yes |
+| 6379 | falkordb | closed | no |
+| 8000 | api | closed | no |
+| 3300 | falkordb browser (dev only) | closed | no |
+
+`PASS: only the UI port answers`. Only `ui` has `ports` in `docker-compose.yml` (a unit test, `tests/test_compose.py`, keeps it so). The other ports exist only through `docker-compose.dev.yml`, bound to 127.0.0.1.
+
+**Secrets in logs (P9.1).** One fast and one agent incident (S2) through the real API, then `docker compose logs --no-color <service> | grep -c` for `gsk_`, `sk-or-` and the `DEMO_TOKEN` value (read inside the api container, never printed): falkordb 0/0/0, api 0/0/0, worker 0/0/0, ui 0/0/0 (31 / 254 / 78 / 9 log lines).
+**Already enforced:** FalkorDB password = `REDIS_ARGS --requirepass` in `docker-compose.yml` + `core/graph/client.py` (`password=`); read-only queries = `ro_query` (`GRAPH.RO_QUERY`) for every read and for `run_readonly_cypher`; timeouts = `QUERY_TIMEOUT_MS` on every query (`core/graph/client.py`). Fast mode `/analyze` now has the per-IP rate limit too (`api/checks.rate_limit`, own counter, same `RATE_LIMIT_PER_MIN`).
+
+**Fresh clone (AC-8, P9.2).** `git clone` of the repo into `/tmp/bp-fresh` (the committed HEAD `e40723e` plus the 13 uncommitted files of this task copied over, because this task is not committed yet), `cp env.example .env`, only `FALKORDB_PASSWORD` and `DEMO_TOKEN` set (both LLM keys empty), `UI_PORT=8601 docker compose -p bpfresh up -d --build`: 4/4 services `healthy` after about 25 s (build 1 min 50 s), UI `/_stcore/health` 200. In the api container: S2 loaded (200), `/analyze` 200 DONE in 0.21 s, agent incident `DONE`, **`degraded=True`** (`investigator / planner / reporter: no provider configured`, 0 LLM calls) in 6.5 s (AC-6, "remove the API keys"). Then `docker compose -p bpfresh down -v` and `rm -rf /tmp/bp-fresh`: no container, volume or directory left.
+
+**Chaos (AC-6, P9.2).** S2 agent incident, the worker crashed while the status was `PLANNING`:
+- `docker kill breachpath-worker-1` (twice): the container stays `exited (137)`. Docker treats a manual kill/stop as an explicit stop, and `restart: unless-stopped` does not bring it back. `docker start` then resumed the pending job from `PLANNING` and the incident was DONE (twice).
+- A real crash (the kernel OOM-kills the worker: `docker update --memory 60m`, then the limit lifted): `t=1.6 s` PLANNING, `t=2.3 s` container back (RestartCount 9 → 10, health `starting`), `t=65.3 s` **DONE, degraded=False**, jobs pending 0. Worker log: `locked by another holder, left un-acked` every 2 s while the dead worker's 60 s lock ran out, then `running from status PLANNING`, `DONE in 4478 ms`, `resumed 5d0de0fe`. The resume takes about one lock TTL because the crashed worker's lock lives 60 s.
+- Bugs found and fixed by it: the restarted worker read its pending job ONCE and gave up if the lock was still held (the incident would have stayed stuck until the next restart): now `resume_pending` retries up to `LOCK_TTL_MS + 5 s`. And the worker crashed with `NOGROUP` when the `jobs` stream was deleted: now it creates the group again.
+
+**Found by the latency run:** kept agent sandboxes (24 h) count toward `MAX_GRAPHS = 20`: after about 8 agent incidents EVERY new incident ended `FAILED: LIMIT_EXCEEDED: 20 graphs exist`. Fix: before each job the worker keeps the newest `MAX_KEPT_SANDBOXES = 6` and deletes older ones (`worker.trim_sandboxes`).
+
+### P9.3 latency (NFR-L1 .. L5), `python -m scripts.latency --n 5 --fresh`
+
+Local Docker (WSL2) on a laptop, 1 worker. Raw numbers: p50 / p95 over n samples.
+
+| ID | Requirement | Target | Measured | Verdict |
+|---|---|---|---|---|
+| L1 | one graph tool call, 177-node graph (`t:s6:baseline`), 8 read tools x 30 calls | p95 < 200 ms | **p95 12.2 ms** (p50 2.9 ms, max 22.8 ms; slowest tool `compute_min_cut` p95 13.9 ms) | met |
+| L2 | fast `/analyze` end to end | p95 < 1 s | **p95 111.8 ms** (p50 104.6 ms) over S1-S8 x 5 in-process; real HTTP to the api container, S2 x 5: p95 111.3 ms. (An earlier run with the worker busy: p95 192.6 ms.) | met |
+| L3 | agent: time to the first event | < 1 s | **p50 64.7 ms, p95 193 ms** (POST until the first event is readable; the UI adds up to its 1 s poll). Before the "worker picked up the incident" event it was p50 1.4 s: the first agent event waits for the MCP subprocess start | met |
+| L4 | agent: full incident end to end, p50 | < 45 s | **cached LLM: p50 3.8 s** (5 runs, every LLM answer replayed, p95 7.0 s). **Fresh (cache OFF, real LLM calls): 1 run, 104.8 s**, status DONE but `degraded` (reporter fell back to the template), 11 LLM calls, Groq rate-limit retries (1 s + 11 s + 12 s) | **not met with real LLM calls** (one run, rate-limited; the cached number only measures the pipeline) |
+| L5 | `POST /incidents` -> 202 | < 100 ms | **p50 11.7 ms, p95 17.9 ms** | met |
+| UI | first paint | (none) | not measurable without a browser: the HTML shell answers in 3.6 ms (p50), and the first script run of `ui/app.py` (AppTest: everything the server computes before the first render) takes p50 334 ms (cold first run 3.0 s) | informational |
+
+**README-ready:**
+
+| What | Target | Measured |
+|---|---|---|
+| One graph tool call (177 nodes), p95 | < 200 ms | 12 ms |
+| Fast mode `/analyze`, p95 | < 1 s | 112 ms |
+| Agent mode, time to first event, p50 | < 1 s | 65 ms |
+| Agent mode, full incident, p50 | < 45 s | 3.8 s with cached LLM answers; 105 s for one run with real, rate-limited free-tier LLM calls |
+| `POST /incidents` accept, p50 | < 100 ms | 12 ms |
+
+The agent pipeline itself (graph work, sandbox, proof) is fast; the end-to-end time of a real agent run is the free-tier LLM latency (Groq 8000 tokens/minute, OpenRouter 50 requests/day), which is why the response cache exists.

@@ -254,6 +254,16 @@ def test_rate_limit(api, monkeypatch):
     err(post_incident(api), 429, "RATE_LIMITED")
 
 
+def test_analyze_is_open_but_rate_limited_per_ip_and_the_scopes_are_separate(api, monkeypatch):
+    monkeypatch.setattr(config, "RATE_LIMIT_PER_MIN", 2)
+    body = {"tenant": "s2", "src": "user:ravi"}
+    assert [api.post("/v1/analyze", json=body).status_code for _ in range(2)] == [200, 200]  # no token needed
+    err(api.post("/v1/analyze", json=body), 429, "RATE_LIMITED")
+    assert post_incident(api).status_code == 202  # fast clicks do not use up the agent-mode budget
+    redis = graph_client.get_db().connection
+    assert redis.scard("active:s2") == 1  # the 429 happened before the run: no incident, nothing left active (only the agent one)
+
+
 # --- events and graph ---
 
 def saved_incident(api):
