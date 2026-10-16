@@ -1,0 +1,1841 @@
+{
+ "meta": {
+  "date": "2026-10-16 09:37 UTC",
+  "commit": "55daa16",
+  "scenarios": [
+   "s1",
+   "s2",
+   "s3",
+   "s4",
+   "s5",
+   "s6",
+   "s7",
+   "s8"
+  ],
+  "methods": [
+   "fast",
+   "agent",
+   "disable",
+   "betweenness",
+   "frequency",
+   "llm_json"
+  ],
+  "models": [
+   "B-LLM-JSON: groq/openai/gpt-oss-120b",
+   "investigator: groq/openai/gpt-oss-120b",
+   "planner: groq/openai/gpt-oss-120b",
+   "reporter: groq/openai/gpt-oss-120b"
+  ],
+  "pause_s": 15.0
+ },
+ "rows": [
+  {
+   "scenario": "s2",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 85,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s2:05",
+    "e:s2:10"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s2",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 1392,
+   "tokens_in": 17342,
+   "tokens_out": 3899,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s2:05",
+    "e:s2:10"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s2",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s2:01",
+    "e:s2:09",
+    "e:s2:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 3,
+    "fix_gap": 1,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:ravi-build",
+     "need:ravi-staging",
+     "need:usage:user:ravi:db:08"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s2",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 5,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s2:02",
+    "e:s2:11"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:ravi-staging"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s2",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s2:01",
+    "e:s2:09"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:ravi-build",
+     "need:ravi-staging"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s2",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 0,
+   "tokens_in": 4289,
+   "tokens_out": 3220,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": true,
+   "note": "",
+   "cut_eids": [
+    "e:s2:05",
+    "e:s2:10"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 83,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s1:01"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 12484,
+   "tokens_in": 9634,
+   "tokens_out": 1741,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s1:01"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s1:01",
+    "e:s1:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 1,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s1:02"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s1:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s1",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 6991,
+   "tokens_in": 4016,
+   "tokens_out": 1083,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s1:01"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 63,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s3:02"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 75756,
+   "tokens_in": 11975,
+   "tokens_out": 2718,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s3:02"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s3:01",
+    "e:s3:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 1,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:mia-wiki"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s3:02"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s3:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:mia-wiki"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s3",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 5740,
+   "tokens_in": 4241,
+   "tokens_out": 2414,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s3:02"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 82,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s4:04"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 1509,
+   "tokens_in": 11022,
+   "tokens_out": 1865,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s4:04"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s4:01",
+    "e:s4:07",
+    "e:s4:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 3,
+    "fix_gap": 2,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s4:02"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s4:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s4",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 18458,
+   "tokens_in": 4207,
+   "tokens_out": 1293,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s4:02"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 52,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "NEEDS_HUMAN",
+   "note": "",
+   "ran": true,
+   "cut_eids": [],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 0,
+    "fix_gap": null,
+    "residual_flow": 1,
+    "residual_jewels": [
+     "db:s5-finance"
+    ],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": false,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 65182,
+   "tokens_in": 6948,
+   "tokens_out": 2753,
+   "degraded": false,
+   "status": "NEEDS_HUMAN",
+   "note": "",
+   "ran": true,
+   "cut_eids": [],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 0,
+    "fix_gap": null,
+    "residual_flow": 1,
+    "residual_jewels": [
+     "db:s5-finance"
+    ],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": false,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s5:01",
+    "e:s5:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": null,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:usage:user:zoe:db:10",
+     "need:zoe-deploy"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s5:03"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": null,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:zoe-deploy"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s5:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": null,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:zoe-deploy"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s5",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 6490,
+   "tokens_in": 4146,
+   "tokens_out": 2634,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 0,
+    "fix_gap": null,
+    "residual_flow": 1,
+    "residual_jewels": [
+     "db:s5-finance"
+    ],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": false,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 81,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s6:04",
+    "e:s6:09"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 18691,
+   "tokens_in": 12412,
+   "tokens_out": 3464,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s6:04",
+    "e:s6:09"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s6:01",
+    "e:s6:05"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 6,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s6:02",
+    "e:s6:07"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s6:01",
+    "e:s6:05"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s6",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 3280,
+   "tokens_in": 4694,
+   "tokens_out": 1243,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s6:01",
+    "e:s6:05"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 2,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 99,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s7:08"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 82105,
+   "tokens_in": 9927,
+   "tokens_out": 1787,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s7:08"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s7:01",
+    "e:s7:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 1,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s7:04"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s7:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s7",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 2687,
+   "tokens_in": 4098,
+   "tokens_out": 990,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s7:08"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "fast",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 114,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s8:05"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "agent",
+   "provider": null,
+   "models": {
+    "investigator": "groq/openai/gpt-oss-120b",
+    "planner": "groq/openai/gpt-oss-120b",
+    "reporter": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 81802,
+   "tokens_in": 9795,
+   "tokens_out": 1888,
+   "degraded": false,
+   "status": "DONE",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s8:05"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": true,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "disable",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 0,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s8:01",
+    "e:s8:90"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 2,
+    "fix_gap": 1,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:max-dev",
+     "need:usage:user:max:db:10"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "betweenness",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 3,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s8:07"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 12,
+     "weighted": 12
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "frequency",
+   "provider": "code",
+   "models": {},
+   "latency_ms": 1,
+   "tokens_in": 0,
+   "tokens_out": 0,
+   "degraded": false,
+   "status": "ok",
+   "note": "",
+   "ran": true,
+   "cut_eids": [
+    "e:s8:01"
+   ],
+   "metrics": {
+    "blast_recall": null,
+    "path_recall": null,
+    "path_precision": null,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [
+     "need:max-dev"
+    ],
+    "collateral": {
+     "count": 0,
+     "weighted": 0
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": false
+   }
+  },
+  {
+   "scenario": "s8",
+   "method": "llm_json",
+   "provider": "groq",
+   "models": {
+    "baseline": "groq/openai/gpt-oss-120b"
+   },
+   "latency_ms": 3540,
+   "tokens_in": 4458,
+   "tokens_out": 1350,
+   "degraded": false,
+   "status": "ok",
+   "ran": true,
+   "cached": false,
+   "note": "",
+   "cut_eids": [
+    "e:s8:07"
+   ],
+   "metrics": {
+    "blast_recall": 1.0,
+    "path_recall": 1.0,
+    "path_precision": 1.0,
+    "cut_size": 1,
+    "fix_gap": 0,
+    "residual_flow": 0,
+    "residual_jewels": [],
+    "broken_needs": [],
+    "collateral": {
+     "count": 12,
+     "weighted": 12
+    },
+    "unknown_eids": [],
+    "verdict_correct": null,
+    "fixes_attack": true,
+    "safe_fix": true
+   }
+  }
+ ],
+ "table": [
+  {
+   "scenario": "s1",
+   "BreachPath (fast)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-frequency": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s2",
+   "BreachPath (fast)": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 3 (gap +1) · residual 0 · broken 3 · collateral 0 (w 0)",
+   "B-betweenness": "cut 2 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-frequency": "cut 2 (gap 0) · residual 0 · broken 2 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s3",
+   "BreachPath (fast)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 2 (gap +1) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-frequency": "cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s4",
+   "BreachPath (fast)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 3 (gap +2) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-frequency": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s5",
+   "BreachPath (fast)": "cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 2 (gap –) · residual 0 · broken 2 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-frequency": "cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s6",
+   "BreachPath (fast)": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-betweenness": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-frequency": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100%"
+  },
+  {
+   "scenario": "s7",
+   "BreachPath (fast)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔",
+   "BreachPath (agent)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔",
+   "B-disable": "cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-frequency": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P –"
+  },
+  {
+   "scenario": "s8",
+   "BreachPath (fast)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "BreachPath (agent)": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔",
+   "B-disable": "cut 2 (gap +1) · residual 0 · broken 2 · collateral 0 (w 0)",
+   "B-betweenness": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12)",
+   "B-frequency": "cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0)",
+   "B-LLM-JSON": "cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) · jewels 100%, paths R 100% / P 100%"
+  }
+ ],
+ "summary": "8 scenarios, 7 of which have a safe fix (s5 has none). A fix is safe when no crown jewel stays reachable and no business need breaks, measured by networkx. BreachPath (fast): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. BreachPath (agent): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-disable: a safe fix in 4 of 7 scenarios, 6 business need(s) broken in total, weighted collateral 0, mean fix gap 1.00. B-betweenness: a safe fix in 6 of 7 scenarios, 1 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. B-frequency: a safe fix in 4 of 7 scenarios, 4 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-LLM-JSON: a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. Compared with BreachPath (fast): no baseline matched it on all three; B-disable, B-betweenness, B-frequency, B-LLM-JSON did worse on at least one of them. BreachPath (fast) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios. BreachPath (agent) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios.",
+ "markdown": "# BreachPath evaluation\n\nRun 2026-10-16 09:37 UTC · commit 55daa16 · models: B-LLM-JSON: groq/openai/gpt-oss-120b; investigator: groq/openai/gpt-oss-120b; planner: groq/openai/gpt-oss-120b; reporter: groq/openai/gpt-oss-120b\n\n| scenario | BreachPath (fast) | BreachPath (agent) | B-disable | B-betweenness | B-frequency | B-LLM-JSON |\n|---|---|---|---|---|---|---|\n| s1 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s2 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +1) · residual 0 · broken 3 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 2 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s3 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s4 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +2) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s5 | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap –) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s6 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s7 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – |\n| s8 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) · jewels 100%, paths R 100% / P 100% |\n\ngap = cut size − brute-force optimum (0 = perfect, – = no optimum); residual = max flow left after the cut (0 = blocked); broken = business needs that lose their path; collateral = (other user, resource) pairs that lose access, w = weighted (recent 3, stale 1); jewels = blast-radius recall; R / P = path recall@20 / precision (– = nothing to measure); all measured by networkx, independent of the product.\n\n## What the table shows\n\n8 scenarios, 7 of which have a safe fix (s5 has none). A fix is safe when no crown jewel stays reachable and no business need breaks, measured by networkx. BreachPath (fast): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. BreachPath (agent): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-disable: a safe fix in 4 of 7 scenarios, 6 business need(s) broken in total, weighted collateral 0, mean fix gap 1.00. B-betweenness: a safe fix in 6 of 7 scenarios, 1 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. B-frequency: a safe fix in 4 of 7 scenarios, 4 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-LLM-JSON: a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. Compared with BreachPath (fast): no baseline matched it on all three; B-disable, B-betweenness, B-frequency, B-LLM-JSON did worse on at least one of them. BreachPath (fast) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios. BreachPath (agent) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios.\n"
+}

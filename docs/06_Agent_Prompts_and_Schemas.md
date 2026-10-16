@@ -183,6 +183,8 @@ COMPROMISED: "<src>"
    without breaking any business need.
 ```
 
+**Compact form actually sent (P8.1):** the full JSON above is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413). `eval/baseline_json_llm.py` sends the same information as `GRAPH (edges are rows [eid, type, src, dst]): {"crown_jewels": [...], "edges": [...]}` and `BUSINESS_NEEDS (rows [principal, resource]): [...]`: a node's label is its id prefix and a node without an edge cannot matter. Only valid needs are sent.
+
 **Output:** JSON (use `response_format: {"type": "json_object"}` where the provider supports it, plus the instruction "Reply with JSON only"), validated by Pydantic against
 `{reachable_jewels: [string], paths: [[string]], cut_eids: [string]}`. Invalid JSON counts as a failed answer (scored 0), not a retry, so the comparison stays fair.
 It is scored by the **networkx** reference (LLD §11).

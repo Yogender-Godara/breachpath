@@ -24,13 +24,13 @@
 | P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 15 / 17 |
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
-| P7 Reporter and UI | Day 3 | 🟨 | 2 / 12 |
-| P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
+| P7 Reporter and UI | Day 3 | 🟨 | 10 / 12 |
+| P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **138 / 203** |
+| **Total** | | | **153 / 203** |
 
-**Now working on:** P7.2 Streamlit layout
+**Now working on:** P8.3 Review ⑧ (yours): read the eval table
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -377,25 +377,26 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** the S2 and S5 reports read well and contain only facts from the state.
 
-### P7.2 Streamlit layout ⬜ 🤖
-- [ ] Sidebar: scenario, load, src, mode, demo token, run, status
-- [ ] Tabs: Attack graph · Agent timeline · Fix & proof · Report · Eval
+### P7.2 Streamlit layout ✅ 🤖
+- [x] Sidebar: scenario, load, src, mode, demo token, run, status
+- [x] Tabs: Attack graph · Agent timeline · Fix & proof · Report · Eval
 
 **Done when:** you can start fast and agent runs from the UI.
 
-### P7.3 Graph tab ⬜ 🤖
-- [ ] Graph component (or the static-image fallback, R17)
-- [ ] Sub-graph rules + colours ([LLD §15](docs/03_LLD.md))
-- [ ] Redraw only on phase change, cached in `session_state`
+### P7.3 Graph tab ✅ 🤖
+- [x] Graph component (or the static-image fallback, R17)
+- [x] Sub-graph rules + colours ([LLD §15](docs/03_LLD.md))
+- [x] Redraw only on phase change, cached in `session_state`
 
 **Done when:** S2 shows its paths, cut edges and protected edges clearly.
 
-### P7.4 Timeline, Fix & proof, Report tabs ⬜ 🤖
-- [ ] Timeline in `st.fragment(run_every=1s)` with short polls
-- [ ] Fix & proof: cut edges + reasons + witnesses, ✅/❌ checks, collateral, suggestion (verified or not)
-- [ ] Report tab (Markdown)
+### P7.4 Timeline, Fix & proof, Report tabs ✅ 🤖
+- [x] Timeline in `st.fragment(run_every=1s)` with short polls
+- [x] Fix & proof: cut edges + reasons + witnesses, ✅/❌ checks, collateral, suggestion (verified or not)
+- [x] Report tab (Markdown)
 
 **Done when:** a live agent run updates smoothly without page flicker.
+*Built and tested headless (Streamlit AppTest + the real API and worker: fast run, agent run QUEUED → DONE with 23 live events). **Still to check by eye in a browser (P7.5):** no flicker during an agent run, and the graph look.*
 
 ### P7.5 Review ⑦ 👤
 - [ ] Walk through the UI on S2, S5 and S8
@@ -405,18 +406,18 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P8: Evaluation (Day 3)
 
-### P8.1 Metrics and baselines ⬜ 🤖
-- [ ] `eval/metrics.py`: blast-radius recall, path recall@20, precision, fix gap, residual, broken needs, collateral, verdict, latency, tokens
-- [ ] Baselines: B-disable, B-betweenness, B-frequency (scored by networkx)
-- [ ] `eval/baseline_json_llm.py` (same model as the Planner, JSON mode, invalid JSON = fail)
-- [ ] `eval/bruteforce.py` (optimum, ≤ 25 candidates)
+### P8.1 Metrics and baselines ✅ 🤖
+- [x] `eval/metrics.py`: blast-radius recall, path recall@20, precision, fix gap, residual, broken needs, collateral, verdict, latency, tokens
+- [x] Baselines: B-disable, B-betweenness, B-frequency (scored by networkx)
+- [x] `eval/baseline_json_llm.py` (same model as the Planner, JSON mode, invalid JSON = fail)
+- [x] `eval/bruteforce.py` (optimum, ≤ 25 candidates)
 
 **Done when:** each baseline runs on S2.
 
-### P8.2 Eval run ⬜ 🤖
-- [ ] `eval/run_eval.py`: S1–S8 × (fast, agent, 4 baselines) → table; provider and model recorded per row
-- [ ] Save `eval/results/latest.json` + Markdown table; `/eval/latest`; Eval tab
-- [ ] Throttle for free-tier limits; use the response cache
+### P8.2 Eval run ✅ 🤖
+- [x] `eval/run_eval.py`: S1–S8 × (fast, agent, 4 baselines) → table; provider and model recorded per row
+- [x] Save `eval/results/latest.json` + Markdown table; `/eval/latest`; Eval tab
+- [x] Throttle for free-tier limits; use the response cache
 
 **Done when:** the full table exists, honest whatever the result.
 
@@ -496,6 +497,11 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 16 | JSON baseline prompt is compact (P8.1) | docs/06 §5: the whole graph as JSON (nodes with label + crown_jewel, edges as objects) → the same information as rows: `crown_jewels` + edges `[eid, type, src, dst]` + valid needs `[principal, resource]` | The full JSON is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413); no other provider has a key. A node's label is its id prefix, and a node with no edge cannot matter | Yes (docs/06 §5, LLD §11) |
+| Oct 16 | Eval table layout (P8.2) | "rows = scenarios, columns = metric × method" → rows = scenarios, columns = methods, each cell packs that method's metrics (cut and gap, residual, broken, collateral, recall/precision, verdict); the full numbers are in `latest.json` | 8 metrics × 6 methods is about 35 columns: unreadable in Markdown and in the UI | Yes (LLD §11) |
+| Oct 16 | Graph component (P7.3) | LLD §15: `streamlit-agraph` (vis.js) [VERIFY], graphviz as fallback → `st.graphviz_chart` with a DOT string (the R17 fallback) | No new dependency, no graphviz binary (the browser draws it with viz.js), and the DOT is easy to unit-test; the layout is automatic. Not interactive (no drag) | Yes (LLD §15) |
+| Oct 16 | `/analyze` returns the graph (P7.3) | `/analyze` → `{findings, plan, verdict, timings_ms}` → also `graph` (the same view as `GET /incidents/{id}/graph`) | A fast state is never stored, so the UI cannot ask `/graph` afterwards, and the UI has no database access | Yes (LLD §9) |
+| Oct 16 | Reporter repair + template (P7.1) | A bad Business impact (collateral claim without data) after the retry → template → the code replaces that section with "Not assessed…" (`llm+repaired`); the template says "not assessed" too and passes the same guard | One unsupported sentence should not throw away a good report | Yes (LLD §6.2, docs/05 R26) |
 | Oct 16 | Reporter model (P7.1) | `MODEL_REPORTER_GROQ` `openai/gpt-oss-20b` → `openai/gpt-oss-120b` (same as the Investigator and Planner) | 20B ignored rules the guard can't check; 1-2 calls per incident, so 120B is affordable | Yes (env.example, VERIFY_RESULTS) |
 | Oct 16 | MCP session per agent step (P6.6) | HLD 5.4 / LLD §5: one MCP stdio subprocess per worker process, restarted on a crash → each LLM step (Investigator, Planner) opens its OWN session inside `asyncio.run` and closes it before returning; no restart logic | The worker and pipeline are plain sync code: one long-lived session would need an event loop shared across threads; a crashed subprocess now only affects the one step (`ToolCrashed` → the pipeline decides) | Yes (HLD §5.4, LLD §5, §6.1) |
 | Oct 16 | Groq 400 `tool_use_failed` (P6.6) | LLD 6.1: any other 4xx is raised as-is (our bug) → a 400 where the provider rejected the model's own malformed tool call (`tool_use_failed` / "tool call validation failed") is TRANSIENT: 1 retry, then `LLMUnavailable` → the next provider → degrade to the fast brains | It is the model's slip, not our request, so it must not fail the incident while another provider may answer correctly. Any other 400/422 is still raised | Yes (LLD §6.1) |

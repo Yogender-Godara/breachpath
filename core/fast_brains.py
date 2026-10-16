@@ -136,7 +136,7 @@ def _proof(state):
 def _impact(state):
     v, plan_ = state["verdict"], state["plan"]
     if v is None:
-        return "No change was made, so nobody lost access."
+        return "No change was made. Collateral: not assessed (no collateral analysis was run for this incident)."
     col = v["collateral"]
     who = "nobody" if not col["count"] else "; ".join(f"{p} loses {r}" for p, r in col["pairs"])
     out = f"- Collateral: {who} ({col['count']} pair(s), weighted {col['weighted']})."

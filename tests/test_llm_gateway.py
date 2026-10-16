@@ -109,7 +109,7 @@ def test_a_missing_model_for_another_agent_is_llm_unavailable(fake):
 
 def test_an_unknown_agent_is_a_bug(fake):
     with pytest.raises(ValueError):
-        gw.chat("baseline", "p", MESSAGES)
+        gw.chat("nonsense", "p", MESSAGES)
 
 
 # --- chat: request building ---
@@ -132,6 +132,13 @@ def test_the_reporter_gets_its_own_max_tokens(fake, monkeypatch):
     gw.chat("planner", "p", MESSAGES)
     reporter, planner = fake.client.requests
     assert (reporter["max_tokens"], planner["max_tokens"]) == (config.LLM_MAX_TOKENS_REPORTER, config.LLM_MAX_TOKENS)  # defaults 2500 / 2000 (docs/06 section 6)
+
+
+def test_the_baseline_agent_uses_the_planners_model_and_4000_max_tokens(fake):
+    fake.client = FakeClient(completion())
+    gw.chat("baseline", "p", MESSAGES)  # MODEL_BASELINE_P is not set: the Planner's MODEL_PLANNER_P is used
+    request, = fake.client.requests
+    assert (request["model"], request["max_tokens"]) == ("model-p", config.LLM_MAX_TOKENS_BASELINE) and config.LLM_MAX_TOKENS_BASELINE == 4000
 
 
 def test_chat_uses_the_given_providers_url_key_model_and_caps(fake, monkeypatch):

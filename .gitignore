@@ -12,6 +12,9 @@ __pycache__/
 data/generated/
 eval/results/*.json
 !eval/results/.gitkeep
+# the shipped results
+!eval/results/latest.json
+!eval/results/latest.md
 
 # Editors / OS
 .vscode/

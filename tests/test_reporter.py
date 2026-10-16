@@ -51,8 +51,7 @@ def s5(states):
 
 def template(state):
     """The fast-mode report: it has the 7 headings and only facts of the state, so it is also a good 'LLM' answer."""
-    text = fast_brains.report(state)["markdown"]
-    return text.replace("No change was made, so nobody lost access.", "Collateral: not assessed.")  # the raw S5 template claims "nobody"
+    return fast_brains.report(state)["markdown"]
 
 
 def say(text):
@@ -208,12 +207,15 @@ def test_unicode_hyphens_are_normalised_before_the_guard_and_the_returned_text_i
 
 # --- the fact guard ---
 
-def test_the_template_passes_the_guard_for_every_status(states):
-    assert reporter.check(template(states["s2"]), slice_of(states["s2"])) == []
-    assert reporter.check(template(states["s5"]), slice_of(states["s5"])) == []
-    # The S5 template says "nobody lost access" where there is no collateral data: the one claim the LLM may not make (the template is not guarded).
-    problems = reporter.check(fast_brains.report(states["s5"])["markdown"], slice_of(states["s5"]))
-    assert len(problems) == 1 and "no collateral data" in problems[0]
+def test_the_s2_and_s5_templates_pass_the_guard(states):
+    for sid in ("s2", "s5"):
+        assert reporter.check(template(states[sid]), slice_of(states[sid])) == [], sid
+    assert "not assessed" in template(states["s5"]).lower().split("## business impact")[1]  # no collateral analysis for S5: the template says so
+
+
+def test_the_no_risk_template_passes_the_guard_too(s2):
+    s2.update(status="DONE_NO_RISK", findings={"reachable_jewels": [], "paths": [], "truncated": False}, plan=None, action=None, verdict=None)
+    assert reporter.check(template(s2), slice_of(s2)) == []
 
 
 def test_without_collateral_data_business_impact_must_say_not_assessed(s2, s5):
@@ -227,6 +229,46 @@ def test_without_collateral_data_business_impact_must_say_not_assessed(s2, s5):
     assert reporter.check(base + "## Business impact\nCollateral: not assessed\n" + tail, slice_) == []
     # with collateral data (S2) "nobody" is a fact and allowed
     assert reporter.check(template(s2), slice_of(s2)) == [] and "nobody" in template(s2).lower()
+
+
+def test_headings_with_markdown_decoration_are_accepted_and_normalised(s2, monkeypatch):
+    good = template(s2)
+    decorated = good.replace("## Summary", "**## Summary**").replace("## Fix", "## **Fix**").replace("## Proof", "__## Proof__").replace("## Next steps", "  ## `Next steps` ")
+    assert reporter.check(decorated, slice_of(s2)) == []
+    Gateway(monkeypatch, say(decorated))
+    assert reporter.write(s2) == (good, False)  # the kept text has plain "## Heading" lines
+
+
+def with_impact(text, body):
+    """The report with the Business impact body replaced."""
+    head, rest = text.split("## Business impact")
+    return head + "## Business impact\n" + body + "\n\n## Next steps" + rest.split("## Next steps")[1]
+
+
+def test_a_collateral_claim_without_data_is_repaired_in_code_after_the_retry(s5, monkeypatch):
+    good = template(s5)
+    claim = with_impact(good, "- Collateral loss: nobody")
+    events = []
+    gateway = Gateway(monkeypatch, say(claim), say(claim))
+    markdown, degraded = reporter.write(s5, emit=lambda *a, **kw: events.append(a))
+    assert degraded is False and len(gateway.calls) == 2 and "nobody" not in markdown
+    assert reporter.NOT_ASSESSED in markdown.split("## Business impact")[1].split("## Next steps")[0]
+    assert markdown.split("## Business impact")[0] == good.split("## Business impact")[0] and "## Next steps" in markdown  # the rest is the LLM's
+    assert reporter.check(markdown, slice_of(s5)) == [] and events[-1][2]["source"] == "llm+repaired"
+
+
+def test_a_collateral_claim_plus_another_problem_is_not_repaired(s5, monkeypatch):
+    bad = with_impact(template(s5), "- Collateral loss: nobody") + "\nSee e:s5:99.\n"
+    Gateway(monkeypatch, say(bad), say(bad))
+    markdown, degraded = reporter.write(s5)
+    assert degraded is True and markdown == fast_brains.report({**s5, "degraded": True})["markdown"]
+
+
+def test_a_collateral_claim_fixed_by_the_retry_is_not_repaired(s5, monkeypatch):
+    good = template(s5)
+    events = []
+    Gateway(monkeypatch, say(with_impact(good, "- nobody")), say(good))
+    assert reporter.write(s5, emit=lambda *a, **kw: events.append(a)) == (good, False) and events[-1][2]["source"] == "llm"
 
 
 def test_node_ids_are_checked_and_need_ids_are_not_mistaken_for_nodes(s2):
@@ -336,7 +378,7 @@ def live(monkeypatch, state):
 def test_live_s2_report(states, monkeypatch):
     state = copy.deepcopy(states["s2"])
     markdown, degraded, final = live(monkeypatch, state)
-    assert not degraded and final["source"] == "llm", f"the template was used: {final}"  # a fallback must FAIL, not pass silently
+    assert not degraded and final["source"].startswith("llm"), f"the template was used: {final}"  # a fallback must FAIL, not pass silently
     assert reporter.check(markdown, slice_of(state)) == []
     assert "e:s2:05" in markdown and "e:s2:10" in markdown and "host action" in markdown.lower()
 
@@ -345,6 +387,6 @@ def test_live_s2_report(states, monkeypatch):
 def test_live_s5_report(states, monkeypatch):
     state = copy.deepcopy(states["s5"])
     markdown, degraded, final = live(monkeypatch, state)
-    assert not degraded and final["source"] == "llm", f"the template was used: {final}"
+    assert not degraded and final["source"].startswith("llm"), f"the template was used: {final}"
     assert reporter.check(markdown, slice_of(state)) == []
     assert "policy:s5-shared-ops" in markdown

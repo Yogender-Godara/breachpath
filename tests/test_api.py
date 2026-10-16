@@ -153,6 +153,8 @@ def test_analyze_s2_done_and_cleans_up(api):
     assert set(out["timings_ms"]) == {"investigator", "executor", "planner", "verifier", "reporter", "total"}
     assert sandboxes_of(out["incident_id"]) == []
     assert graph_client.get_db().connection.scard("active:s2") == 0
+    graph = out["graph"]  # the UI cannot ask /graph for a fast run (its state is never stored), so /analyze carries it
+    assert {e["eid"] for e in graph["edges"] if e["cut"]} == {"e:s2:05", "e:s2:10"} and any(n["is_src"] for n in graph["nodes"])
 
 
 def test_analyze_s5_needs_human_and_the_split_sandbox_is_cleaned_up(api):
@@ -273,6 +275,13 @@ def test_graph_marks_the_cut_the_path_and_the_protected_edges(api):
     assert by_eid["e:s2:05"]["on_path"] and by_eid["e:s2:01"]["on_path"] and by_eid["e:s2:01"]["protected"]
     assert not by_eid["e:s2:05"]["protected"]
     assert {e for e, v in by_eid.items() if v["protected"]} <= set(state["action"]["protected_eids"])
+    # the company-wide background is hidden: a protected edge is drawn only if it touches a node of an attack path (or is next to a cut edge)
+    path_nodes = {n for p in state["findings"]["paths"] for n in p["node_ids"]}
+    cut_nodes = {n for e in ("e:s2:05", "e:s2:10") for n in (by_eid[e]["src"], by_eid[e]["dst"])}
+    drawn_protected = {e for e, v in by_eid.items() if v["protected"]}
+    assert all({by_eid[e]["src"], by_eid[e]["dst"]} & (path_nodes | cut_nodes) for e in drawn_protected)
+    assert view["hidden_protected"] == len(state["action"]["protected_eids"]) - len(drawn_protected) > 30  # S2: about 40 background edges hidden
+    assert len(view["edges"]) < 25 and view["more"] == 0
     node_ids = {n["id"] for n in view["nodes"]}
     assert all(e["src"] in node_ids and e["dst"] in node_ids for e in view["edges"])
     assert len(view["nodes"]) + len(view["edges"]) <= graph_view.MAX_ELEMENTS

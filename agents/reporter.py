@@ -31,8 +31,11 @@ NODE = re.compile(rf"(?<![\w:])(?:user|group|role|policy|server|db|secret):{_NAM
 PRONOUN = re.compile(r"\b(?:he|she|him|her|his|hers)\b", re.IGNORECASE)
 MODE_LINE = re.compile(r"^.*\bGenerated in\b.*\bmode\b.*$", re.MULTILINE)
 NO_ONE = re.compile(r"\b(?:nobody|no one|none)\b", re.IGNORECASE)
-IMPACT = re.compile(r"^## +Business impact.*?$(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
-HEADING = re.compile(r"^## +(.+?) *$", re.MULTILINE)
+# "## Heading" with markdown decoration around it ("**## Summary**", "## **Summary**") counts as a heading: group 1 is the plain text.
+HEADING = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*(.+?)[*_`]*[ \t]*$", re.MULTILINE)
+IMPACT = re.compile(r"^[*_ \t]*##[ \t]+[*_`]*Business impact.*?$(.*?)(?=^[*_ \t]*##[ \t]|\Z)", re.MULTILINE | re.DOTALL)
+NOT_ASSESSED = "Not assessed: no collateral analysis was run for this incident."
+COLLATERAL_PROBLEM = 'there is no collateral data: in Business impact do not say "nobody", "no one" or "none"; write "not assessed"'
 
 
 # --- the slice: only what the report may use ---
@@ -119,7 +122,7 @@ def check(markdown, slice_):
     impact = (IMPACT.search(markdown) or [None, ""])[1]
     no_collateral_data = not (slice_.get("plan") or {}).get("simulation") and not (slice_.get("verdict") or {}).get("collateral")
     if no_collateral_data and impact.strip() and (NO_ONE.search(impact) or "not assessed" not in impact.lower()):
-        problems.append('there is no collateral data: in Business impact do not say "nobody", "no one" or "none"; write "not assessed"')
+        problems.append(COLLATERAL_PROBLEM)
     if pronouns := dict.fromkeys(w.lower() for w in PRONOUN.findall(markdown)):
         problems.append(f"do not use pronouns for identities ({', '.join(pronouns)}): refer to them by id")
     for line in MODE_LINE.findall(markdown):
@@ -136,9 +139,15 @@ def _emit(emit, type_, msg, data, **kw):
 
 
 def _normalise(text):
-    """Models write ids with Unicode hyphens (secret:s2-billing + U+2011 + pw), which would read as another id. The guard and the returned
-    report use the normalised text."""
-    return text.translate(_TYPOGRAPHY)
+    """Models write ids with Unicode hyphens (secret:s2-billing + U+2011 + pw), which would read as another id, and decorate headings
+    ("**## Summary**"). The guard and the returned report use the normalised text: plain "## Heading" lines."""
+    return HEADING.sub(r"## \1", text.translate(_TYPOGRAPHY))
+
+
+def _repair_impact(text):
+    """Replace the body of the Business impact section by NOT_ASSESSED (a collateral claim without data)."""
+    m = IMPACT.search(text)
+    return text if m is None else text[:m.start(1)] + "\n" + NOT_ASSESSED + "\n\n" + text[m.end(1):]
 
 
 def _unfence(text):
@@ -148,7 +157,8 @@ def _unfence(text):
 
 def _ask(provider, slice_, emit, tally):
     """One call, and ONE retry when the guard finds problems (they are sent back as a user message).
-    -> (markdown, []) or (None, the problems of the 2nd answer). LLMUnavailable goes up: the caller tries the next provider."""
+    -> (markdown, repaired) or (None, False). repaired: after the retry the ONLY problem left was a collateral claim without data, so the
+    code replaced the Business impact body by NOT_ASSESSED. LLMUnavailable goes up: the caller tries the next provider."""
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _user_message(slice_)}]
     for attempt in (1, 2):
         result = llm_gateway.chat("reporter", provider, messages, temperature=TEMPERATURE)
@@ -160,21 +170,23 @@ def _ask(provider, slice_, emit, tally):
               {"provider": result.provider, "model": result.model, "attempt": attempt, "cached": result.cached, "problems": problems},
               latency_ms=result.latency_ms, tokens_in=result.tokens_in, tokens_out=result.tokens_out)
         if not problems:
-            return text, []
+            return text, False
         tally["problems"] = problems
         messages = messages + [{"role": "assistant", "content": text}, {"role": "user", "content":
                                "Your report has problems:\n" + "\n".join(f"- {p}" for p in problems) + "\nWrite the whole report again and fix them."}]
-    return None, problems
+    if set(problems) == {COLLATERAL_PROBLEM} and not check(repaired := _repair_impact(text), slice_):
+        return repaired, True  # keep the rest of the LLM report
+    return None, False
 
 
 def write(state, emit=None):
     """-> (markdown, degraded). degraded is True when the template report was used instead of the LLM's."""
     slice_ = _slice(state, _cut_kinds(state))
     tally = {"llm_calls": 0, "provider": None, "model": None, "problems": []}
-    markdown = None
+    markdown, repaired = None, False
     for provider in llm_gateway.providers_for("reporter"):
         try:
-            markdown, _ = _ask(provider, slice_, emit, tally)
+            markdown, repaired = _ask(provider, slice_, emit, tally)
         except LLMUnavailable as e:
             _emit(emit, "step", f"Reporter provider {provider} unavailable: {e}", {"provider": provider, "reason": str(e)})
             continue
@@ -185,7 +197,8 @@ def write(state, emit=None):
     elif state["degraded"] and DEGRADED_LINE not in markdown:
         markdown = markdown.rstrip() + "\n\n" + DEGRADED_LINE
     markdown = markdown.rstrip() + "\n"
-    _emit(emit, "report", f"report from the {'template (fallback)' if degraded else 'LLM'}: {len(markdown)} chars",
-          {"source": "template" if degraded else "llm", "provider": tally["provider"], "model": tally["model"],
+    source = "template" if degraded else "llm+repaired" if repaired else "llm"
+    _emit(emit, "report", f"report from the {'template (fallback)' if degraded else 'LLM' + (' (Business impact repaired in code)' if repaired else '')}: {len(markdown)} chars",
+          {"source": source, "provider": tally["provider"], "model": tally["model"],
            "llm_calls": tally["llm_calls"], "retry_problems": tally["problems"], "chars": len(markdown)})
     return markdown, degraded

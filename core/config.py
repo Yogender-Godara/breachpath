@@ -19,6 +19,7 @@ COLLATERAL_RECENT_DAYS = int(os.getenv("COLLATERAL_RECENT_DAYS", "90"))
 LLM_PROVIDERS = [p.strip().lower() for p in os.getenv("LLM_PROVIDERS", "groq,openrouter").split(",") if p.strip()]  # the order is the fallback order
 LLM_TIMEOUT_S = float(os.getenv("LLM_TIMEOUT_S", "30"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
+LLM_MAX_TOKENS_BASELINE = int(os.getenv("LLM_MAX_TOKENS_BASELINE", "4000"))  # docs/06 section 6
 LLM_MAX_TOKENS_REPORTER = int(os.getenv("LLM_MAX_TOKENS_REPORTER", "2500"))  # docs/06 section 6: the report is longer than a tool plan
 LLM_MAX_WAIT_S = float(os.getenv("LLM_MAX_WAIT_S", "20"))  # the longest we wait for a 429's retry-after
 LLM_CACHE = os.getenv("LLM_CACHE", "on").strip().lower() in ("on", "true", "1")
