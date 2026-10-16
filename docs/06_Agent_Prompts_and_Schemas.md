@@ -134,6 +134,13 @@ Steps:
 ```text
 Role: REPORTER. Input: the full incident state JSON. No tools.
 Write a Markdown incident report for a security manager. Use ONLY facts in the JSON.
+attack_max_flow_before_fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
+Rules:
+- Write "not assessed" for any section or item with no data in the JSON (e.g. NEEDS_HUMAN has no verdict and no collateral analysis).
+- Use only facts in the JSON. No inferences (e.g. "kept by the rest of the org", "minimal change") unless a field says so.
+- Removed edges were changed in a SANDBOX only. Host actions (delete file, rotate secret) are recommendations: write them as steps to do, never as done.
+- Never mention JSON field names or internal values (status=, safe=true, attack_max_flow...).
+- Refer to identities by id only; never use pronouns (he/she/him/her/his/hers) for them.
 
 Sections (in this order, keep each short):
 ## Summary            – one paragraph: who was compromised, what was at risk, what was done, result.
@@ -149,7 +156,9 @@ If status is NEEDS_HUMAN, say clearly that no safe automatic fix was found and w
 If degraded=true, add one line: "Generated in degraded mode (LLM step unavailable)."
 ```
 
-**Output:** Markdown text (no submit tool). **Fallback** if the LLM fails: a Jinja-style template fills the same sections from the state, so the report is never missing.
+**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** headings, eids and node ids must exist in the slice, "verified" only when `proven` (and always when proven), NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
+
+**Output:** Markdown text (no submit tool). **Fallback** if the LLM fails or the guard rejects twice: a Jinja-style template fills the same sections from the state, so the report is never missing.
 
 ---
 

@@ -162,14 +162,15 @@ def chat(agent, provider, messages, tools=None, tool_choice="auto", temperature=
     data = _cache_get(ckey) if ckey else None
     cached = data is not None
     if not cached:
-        request = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": config.LLM_MAX_TOKENS}
+        request = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": config.LLM_MAX_TOKENS_REPORTER if agent == "reporter" else config.LLM_MAX_TOKENS}
         if tools:
             request.update(tools=tools, tool_choice=tool_choice)
         if response_format:
             request["response_format"] = response_format
         data = _create(_client(provider, url, key), request).model_dump(mode="json", warnings=False)
-        if ckey:
-            _cache_set(ckey, data)  # only successful responses reach this line
+        message = data["choices"][0]["message"]
+        if ckey and (message.get("content") or message.get("tool_calls")):  # an EMPTY answer (a reasoning model out of tokens) is not cached
+            _cache_set(ckey, data)
     ms = round((time.perf_counter() - started) * 1000)
     usage = data.get("usage") or {}
     result = LLMResult(ChatCompletionMessage.model_validate(data["choices"][0]["message"]), provider, model,

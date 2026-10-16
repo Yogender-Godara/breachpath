@@ -159,7 +159,7 @@ stateDiagram-v2
 
 ### 5.4 How agents use MCP
 
-- The Worker is an **MCP client**. At startup it launches the BreachPath MCP server as a **stdio subprocess** (one per worker process), lists its tools, and converts each agent's **allow-listed tools** into OpenAI-format `tools` (function name, description, JSON schema). If the subprocess dies, the worker restarts it and retries the tool call once.
+- The Worker is an **MCP client**. For **each agent step** (Investigator, Planner) it launches the BreachPath MCP server as a **stdio subprocess** (**one MCP session per agent step**, closed when the step ends), lists its tools, and converts the agent's **allow-listed tools** into OpenAI-format `tools` (function name, description, JSON schema). The pipeline is plain sync code, so no event loop or subprocess is shared between steps. If the subprocess crashes, only that step is affected: `ToolCrashed` goes to the pipeline (a `MinCutError` → `NEEDS_HUMAN`, anything else → `FAILED`), with no restart or tool-call retry.
 - When the model returns `tool_calls`, the Worker calls the MCP tool and sends back a `role: "tool"` message with the result.
 - This meets the Track 1 focus on "tool selection through MCP", with no network listener at all: stdio is a private pipe between two processes.
 - **Bonus:** the same MCP server can be added to Claude Desktop or Claude Code, so judges can call BreachPath tools directly.

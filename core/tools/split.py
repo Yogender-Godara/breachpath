@@ -38,9 +38,10 @@ def divergence_points(witness, edges, labels):
     return points
 
 
-def _suggestion(kind, proven, text, node=None, new_node=None, moved=(), copied=(), then_remove=()):
+def _suggestion(kind, proven, text, node=None, new_node=None, moved=(), copied=(), then_remove=(), proof=None):
+    """proof: what the split sandbox measured (max flow, BFS, needs) when proven by a split; None otherwise."""
     return {"suggestion_type": kind, "split_node": node, "new_node": new_node, "moved_edges": list(moved),
-            "copied_edges": list(copied), "then_remove": list(then_remove), "proven": proven, "text": text}
+            "copied_edges": list(copied), "then_remove": list(then_remove), "proven": proven, "text": text, "proof": proof}
 
 
 def _do_split(graph, point, labels):
@@ -122,7 +123,8 @@ def split_suggestion(sandbox, src, *, incident_id, lock_token):
             if then_remove:
                 _apply(split, then_remove)
             attack = verify.attack_status(split, src)
-            passed, _ = verify.judge(attack["max_flow"], attack["reached_jewels"], verify.needs_status(split))
+            business = verify.needs_status(split)
+            passed, _ = verify.judge(attack["max_flow"], attack["reached_jewels"], business)
             if passed:
                 needs = ro_query(sandbox, queries.NEEDS_BY_IDS, {"ids": point["business"]})
                 who = ", ".join(sorted({n[1] for n in needs}))
@@ -130,7 +132,9 @@ def split_suggestion(sandbox, src, *, incident_id, lock_token):
                         f"(only {_describe(split, copied)}). "
                         f"Then remove: {', '.join(then_remove) if then_remove else 'nothing'}. "
                         f"Verified: maxFlow = 0, all needs ok.")
-                proven = _suggestion("split_node", True, text, point["node"], new_node, moved, copied, then_remove)
+                proof = {"max_flow_after_split": attack["max_flow"], "bfs_reached_jewels": attack["reached_jewels"],
+                         "needs_checked": len(business), "needs_ok": all(n["ok"] for n in business)}
+                proven = _suggestion("split_node", True, text, point["node"], new_node, moved, copied, then_remove, proof)
                 return proven  # the finally below keeps the -split sandbox
     finally:
         if proven is None:

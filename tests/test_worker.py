@@ -48,6 +48,7 @@ def fast_agents(monkeypatch):
     from agents import brains
     monkeypatch.setattr(brains, "investigate", fast_brains.investigate)
     monkeypatch.setattr(brains, "plan", fast_brains.plan)
+    monkeypatch.setattr(brains, "report", fast_brains.report)
     loader.load_scenario("s2")
 
 

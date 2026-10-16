@@ -56,7 +56,7 @@ class AgentResult:
 
 @asynccontextmanager
 async def open_session(profile="full"):
-    """One stdio MCP subprocess + session. The worker (P6.6) owns one per process; tests open their own.
+    """One stdio MCP subprocess + session. The brains open one per agent step (agents/brains.py); tests open their own.
     Catch run_agent's exceptions (ToolCrashed...) INSIDE the `async with`: anyio wraps one that leaves it in an ExceptionGroup."""
     async with stdio_client(server_params(profile)) as (read, write):
         async with ClientSession(read, write) as session:

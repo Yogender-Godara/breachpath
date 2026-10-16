@@ -125,6 +125,15 @@ def test_forced_tool_choice_is_downgraded_when_the_provider_cannot_force(fake, m
     assert (plain["model"], plain["temperature"], plain["max_tokens"]) == ("model-p", 0, config.LLM_MAX_TOKENS)
 
 
+def test_the_reporter_gets_its_own_max_tokens(fake, monkeypatch):
+    monkeypatch.setenv("MODEL_REPORTER_P", "model-r")
+    fake.client = FakeClient(completion(), completion())
+    gw.chat("reporter", "p", MESSAGES)
+    gw.chat("planner", "p", MESSAGES)
+    reporter, planner = fake.client.requests
+    assert (reporter["max_tokens"], planner["max_tokens"]) == (config.LLM_MAX_TOKENS_REPORTER, config.LLM_MAX_TOKENS)  # defaults 2500 / 2000 (docs/06 section 6)
+
+
 def test_chat_uses_the_given_providers_url_key_model_and_caps(fake, monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "g-key")
     monkeypatch.setenv("GROQ_BASE_URL", "http://g.test/v1")
@@ -256,6 +265,15 @@ def test_a_cache_hit_skips_the_client_and_failures_are_not_cached(fake, monkeypa
     second = gw.chat("planner", "p", messages)  # this one must not
     assert (first.cached, second.cached, second.message.content) == (False, True, "first")
     assert len(fake.client.requests) == 2 and second.tokens_in == 5
+
+
+def test_an_empty_answer_is_returned_but_not_cached(fake, monkeypatch, clean_cache):
+    monkeypatch.setattr(config, "LLM_CACHE", True)
+    messages = [{"role": "user", "content": "unit-test-empty-answer"}]
+    fake.client = FakeClient(completion(""), completion("real"))
+    empty = gw.chat("planner", "p", messages)
+    again = gw.chat("planner", "p", messages)  # not served from the cache: the client is called again
+    assert (empty.message.content, again.message.content, again.cached) == ("", "real", False) and len(fake.client.requests) == 2
 
 
 def test_a_response_with_a_value_the_sdk_does_not_know_still_round_trips_through_the_cache(fake, monkeypatch, clean_cache):
