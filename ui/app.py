@@ -17,7 +17,7 @@ from ui import api_client as api, view  # noqa: E402
 from ui.api_client import ApiError  # noqa: E402
 from ui.run import poll  # noqa: E402
 
-STATE_KEYS = ("status", "findings", "plan", "action", "verdict", "report", "failure_detail")  # what /analyze returns of the state
+STATE_KEYS = ("status", "findings", "plan", "action", "verdict", "report", "failure_detail", "attempt", "degraded", "degraded_steps", "instructions")  # what /analyze returns of the state
 st.set_page_config(page_title="BreachPath", layout="wide")
 
 
@@ -32,7 +32,7 @@ def running(run):
 
 # --- the run: start (polling lives in ui/run.py) ---
 
-def start(sid, src, mode, token):
+def start(sid, src, mode, token, instructions=""):
     try:
         if mode == "Fast":
             with st.spinner("Running fast mode..."):
@@ -40,7 +40,7 @@ def start(sid, src, mode, token):
             st.session_state.run = {"mode": "fast", "tenant": sid, "src": src, "incident_id": res["incident_id"], "status": res["status"],
                                     "events": res["events"], "last_id": "0-0", "state": {k: res.get(k) for k in STATE_KEYS}, "graph": res["graph"]}
         else:
-            created = api.start_incident(sid, src, token)
+            created = api.start_incident(sid, src, token, instructions)
             st.session_state.run = {"mode": "agent", "tenant": sid, "src": src, "incident_id": created["incident_id"], "status": created["status"],
                                     "events": [], "last_id": "0-0", "state": None, "graph": None}
     except ApiError as e:
@@ -74,15 +74,20 @@ def sidebar():
         token = st.text_input("Demo token", type="password", help="Agent mode needs the demo token (the API's DEMO_TOKEN)")
         if not token:
             st.session_state["mode"] = "Fast"
+        instructions = st.text_area("Operator instructions (agent mode)", key="instructions", max_chars=500, disabled=not token, height=110,
+                                    placeholder="e.g. Don't touch the build server, CI depends on it.",
+                                    help="Free text. In agent mode the Planner turns it into edges the fix must avoid; the code recomputes and proves the result. Fast mode ignores it.")
         mode = st.radio("Mode", ["Fast", "Agent"], key="mode", horizontal=True, disabled=not token)
         if not token:
             st.caption("Agent mode needs a demo token.")
         run = st.session_state.get("run")
         if st.button("Run", type="primary", width="stretch", disabled=running(run)):
-            start(sid, src, mode, token)
+            start(sid, src, mode, token, instructions if mode == "Agent" else "")
             run = st.session_state.get("run")
         if run:
-            st.markdown(f"**Status:** {view.status_line(run['status'])}")
+            st.markdown(f"**Status:** {view.status_line(run['status'], (run['state'] or {}).get('attempt'))}")
+            if (run["state"] or {}).get("degraded_steps"):
+                st.warning("Fell back to the code: " + "; ".join(run["state"]["degraded_steps"]))
             st.caption(f"{run['mode']} · {run['tenant']} · {run['src']} · incident {run['incident_id']}")
 
 
@@ -146,6 +151,16 @@ def fix_tab(run):
         return
     if state.get("failure_detail"):
         st.warning(state["failure_detail"])
+    instruction = view.instruction_view(state)
+    if instruction:
+        st.subheader("Operator instruction")
+        st.info(f"“{instruction['text']}”")
+        if not instruction["honoured"]:
+            st.warning(f"The instruction could not be honoured: {instruction['note']}")
+        else:
+            for a in instruction["avoid"]:
+                st.markdown(f"**Avoided {a['eid']}** — from the words: “{a['quote']}”")
+            st.markdown(instruction["changed"])
     st.subheader("Removed edges")
     if plan["cut_eids"]:
         st.dataframe(view.cut_rows(plan), hide_index=True, width="stretch")

@@ -24,11 +24,11 @@
 | P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 15 / 17 |
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
-| P7 Reporter and UI | Day 3 | 🟨 | 10 / 12 |
+| P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
 | P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **153 / 203** |
+| **Total** | | | **159 / 209** |
 
 **Now working on:** P8.3 Review ⑧ (yours): read the eval table
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
@@ -398,6 +398,16 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 **Done when:** a live agent run updates smoothly without page flicker.
 *Built and tested headless (Streamlit AppTest + the real API and worker: fast run, agent run QUEUED → DONE with 23 live events). **Still to check by eye in a browser (P7.5):** no flicker during an agent run, and the graph look.*
 
+### P7.7 Operator instructions ✅ 🤖
+- [x] `compute_min_cut(avoid_eids)`: guarded throw-away copy with those edges at `PROTECT_CAP`; unknown eid = BAD_INPUT; says which avoided edge makes a safe cut impossible
+- [x] `POST /v1/incidents` accepts `instructions` (≤ 500 chars, stored in the state); UI text area (agent mode); the instruction is shown at the top of Fix & proof
+- [x] Planner: instruction in the task, `submit_fix_plan.avoid [{eid, quote}]`, code checks (eid exists, quote is a substring, no avoided eid in the cut, `simulate_cut` verified), one retry, else the code candidate with an "instruction could not be honoured" note
+- [x] Report + Fix & proof: the instruction, the avoided edges with their quotes, one sentence on what changed versus the default fix
+- [x] Tests with a fake LLM, and live demo tests (S8 legacy role, S2 build server)
+- [x] UI status "VERIFYING · step 3/3 · attempt 1/3"; `state["degraded_steps"]` shown in the UI and the report line
+
+**Done when:** an LLM run gives a DIFFERENT, still-proven result than fast mode (S8: `e:s8:06` instead of `e:s8:05`; S2: a cut without `e:s2:10`).
+
 ### P7.5 Review ⑦ 👤
 - [ ] Walk through the UI on S2, S5 and S8
 - [ ] Commit
@@ -497,6 +507,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 16 | Operator instructions (P7.7) | agent mode accepts a free-text operator instruction; the Planner turns it into graph constraints; code re-computes and proves | A case where the LLM gives a DIFFERENT, still-proven result than fast mode. The LLM only maps words to edges (`avoid` + quotes); the code checks the quotes and eids, recomputes the cut under the constraint (`compute_min_cut(avoid_eids)`, a guarded copy that counts as a simulation) and verifies with `simulate_cut`. `avoid` is optional in Pydantic so cached answers stay valid; the instruction block is added to the prompt only when there is an instruction (a normal run keeps its cache keys). Also: `degraded_steps` names which step fell back; the status line separates step from attempt | Yes (LLD §5, §6.2, §7.2, §9, §15; docs/06 §3) |
 | Oct 16 | Plan `alternatives` (P7) | A plan recorded only the chosen cut → also `alternatives`: every simulated cut NOT chosen with its collateral, size, staleness and blocks_attack/needs_ok, filled in code from `simulate_cut` (planner and fast mode); shown in Fix & proof, the Reporter slice and the template. The Reporter guard requires the Fix section to name each alternative and its collateral number | The trade-off (why this cut and not the other) is the demo's key sentence; the prompt alone was ignored by the model in a live S8 run | Yes (LLD §6.2, §9, §15, docs/06 §4) |
 | Oct 16 | JSON baseline prompt is compact (P8.1) | docs/06 §5: the whole graph as JSON (nodes with label + crown_jewel, edges as objects) → the same information as rows: `crown_jewels` + edges `[eid, type, src, dst]` + valid needs `[principal, resource]` | The full JSON is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413); no other provider has a key. A node's label is its id prefix, and a node with no edge cannot matter | Yes (docs/06 §5, LLD §11) |
 | Oct 16 | Eval table layout (P8.2) | "rows = scenarios, columns = metric × method" → rows = scenarios, columns = methods, each cell packs that method's metrics (cut and gap, residual, broken, collateral, recall/precision, verdict); the full numbers are in `latest.json` | 8 metrics × 6 methods is about 35 columns: unreadable in Markdown and in the UI | Yes (LLD §11) |

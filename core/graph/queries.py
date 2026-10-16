@@ -217,6 +217,14 @@ DELETE r
 RETURN count(*) AS deleted
 """)
 
+# Operator instruction: edges the cut must not use get cap = $protect_cap on a throw-away copy (they are NOT marked protected)
+AVOID_EDGES = _fmt("""
+UNWIND $eids AS eid
+MATCH ()-[r:{T}]->() WHERE r.eid = eid
+SET r.cap = $protect_cap
+RETURN count(r)
+""")
+
 # Split simulation writes (sandbox only): a node copy per label, edge create / delete, protected caps reset
 CREATE_NODE = {label: f"CREATE (n:{SHARED_LABEL}:{label}) SET n += $props" for label in NODE_LABELS}
 CREATE_EDGE = _fmt("""

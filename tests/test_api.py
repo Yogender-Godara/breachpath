@@ -208,6 +208,25 @@ def test_incident_created_stays_queued_and_is_in_the_jobs_stream(api):
     err(api.get("/v1/incidents/nope"), 404, "NOT_FOUND")
 
 
+def test_an_operator_instruction_is_stored_in_the_state_and_analyze_ignores_it(api):
+    text = "  Don't touch the build server, CI depends on it.  "
+    r = api.post("/v1/incidents", json={"tenant": "s2", "src": "user:ravi", "mode": "agent", "instructions": text}, headers={"X-Demo-Token": TOKEN})
+    assert r.status_code == 202
+    api.made.append(r.json()["incident_id"])
+    state = api.get(f"/v1/incidents/{r.json()['incident_id']}").json()
+    assert state["instructions"] == "Don't touch the build server, CI depends on it."  # trimmed
+    plain = post_incident(api)  # no instruction: an empty string
+    assert api.get(f"/v1/incidents/{plain.json()['incident_id']}").json()["instructions"] == ""
+    err(api.post("/v1/incidents", json={"tenant": "s2", "src": "user:ravi", "mode": "agent", "instructions": "x" * 501}, headers={"X-Demo-Token": TOKEN}),
+        400, "BAD_INPUT")  # too long: refused before anything is queued
+    from api.routes.incidents import IncidentBody
+    assert IncidentBody(tenant="s2", src="user:ravi", mode="agent", instructions="x" * 500).instructions == "x" * 500  # 500 is allowed, 501 is not
+    done = api.post("/v1/analyze", json={"tenant": "s2", "src": "user:ravi", "instructions": "Do not touch e:s2:05"}).json()  # fast mode: ignored
+    api.made.append(done["incident_id"])
+    assert done["plan"]["cut_eids"] == ["e:s2:05", "e:s2:10"] and done["plan"]["avoid"] == [] and done["plan"]["instruction"] is None
+    assert done["attempt"] == 1 and done["degraded"] is False and done["degraded_steps"] == []
+
+
 def test_incident_unknown_src(api):
     err(post_incident(api, src="user:nobody"), 400, "UNKNOWN_SRC")
 

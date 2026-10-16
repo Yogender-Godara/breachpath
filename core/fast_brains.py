@@ -72,7 +72,8 @@ def plan(state, *, lock_token, known_sims=None):
     cut = unwrap(read.compute_min_cut(sandbox, src))  # MinCutError is not caught here: the pipeline turns it into NEEDS_HUMAN
     max_flow = int(cut["max_flow"])
     base = {"cut_eids": [], "chosen": None, "source": "code", "reasons": [], "notes": "", "safe": cut["safe"],
-            "max_flow": max_flow, "witness": {}, "simulation": None, "suggestion": None, "alternatives": []}
+            "max_flow": max_flow, "witness": {}, "simulation": None, "suggestion": None, "alternatives": [],
+            "avoid": [], "instruction": None, "default_fix": None}  # the last three: operator instructions (agent mode only, agents/planner.py)
     if not cut["safe"]:
         base["suggestion"] = unwrap(split.split_suggestion(sandbox, src, **auth))
         base["notes"] = f"No safe cut: max flow {max_flow} means an attack path made only of business-critical edges."
@@ -130,12 +131,32 @@ def _fix(state):
     if status == "DONE_NO_RISK":
         return "Nothing to remove."
     if not plan_ or not plan_["cut_eids"]:
-        return "No automatic fix was applied."
+        return "No automatic fix was applied." + _instruction_text(state)
     lines = [f"- `{r['eid']}`: {r['why']}" for r in plan_["reasons"]]
     text = "\n".join(lines) + f"\n\n{plan_['notes']}"
     if plan_.get("alternatives"):
         text += "\n\nAlternatives considered:\n" + "\n".join(f"- {alternative_line(a)}" for a in plan_["alternatives"])
-    return text
+    return text + _instruction_text(state)
+
+
+def _instruction_text(state):
+    """The operator instruction, the edges it ruled out (with the quotes), and what it changed versus the default fix. '' without an instruction."""
+    plan_ = state["plan"] or {}
+    if not state.get("instructions"):
+        return ""
+    out = f'\n\nOperator instruction: "{state["instructions"]}"'
+    info = plan_.get("instruction") or {}
+    if not info.get("honoured"):
+        return out + f"\nThe instruction could not be honoured: {info.get('note', 'no plan was made')}."
+    out += "".join(f'\n- avoided {a["eid"]}, from the words: "{a["quote"]}"' for a in plan_.get("avoid", [])) or "\n- the instruction rules out no edge"
+    default = plan_.get("default_fix")
+    if default:
+        c = default["collateral"]
+        out += (f"\nWithout the instruction the fix would have been {', '.join(default['cut_eids'])} (collateral {c['count']}, weighted {c['weighted']}); "
+                f"because of the instruction it is {', '.join(plan_['cut_eids'])}.")
+    else:
+        out += "\nThe instruction did not change the fix."
+    return out
 
 
 def alternative_line(a):
@@ -186,6 +207,14 @@ def _next(state):
     return f"- Rotate the credentials of {state['src']}.\n- Review the removed access with its owners."
 
 
+DEGRADED_LINE = "Generated in degraded mode (LLM step unavailable)."
+
+
+def degraded_line(steps):
+    """The report's degraded line; it names WHICH steps fell back when the state knows ('Generated in degraded mode (reporter: rate limit).')."""
+    return DEGRADED_LINE if not steps else f"Generated in degraded mode ({'; '.join(steps)})."
+
+
 def report(state):
     findings = state["findings"]
     paths = findings["paths"][:5]
@@ -204,5 +233,5 @@ def report(state):
             ("Business impact", _impact(state)), ("Next steps", _next(state))]
     text = "\n\n".join(f"## {title}\n{content}" for title, content in body)
     if state["degraded"]:
-        text += "\n\nGenerated in degraded mode (LLM step unavailable)."
+        text += "\n\n" + degraded_line(state.get("degraded_steps"))
     return {"markdown": text + "\n"}

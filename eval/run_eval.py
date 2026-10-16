@@ -55,10 +55,10 @@ def _models(events):
     return out
 
 
-def run_product(sid, mode, graph):
-    """The real pipeline, in-process. -> (state, events, wall ms)."""
+def run_product(sid, mode, graph, instructions=""):
+    """The real pipeline, in-process. instructions: an operator instruction (agent mode). -> (state, events, wall ms)."""
     loader.load_scenario(sid)  # the baseline graph (idempotent)
-    state = new_state(sid, graph["src"], mode)
+    state = new_state(sid, graph["src"], mode, instructions)
     sink = [] if mode == "fast" else None  # agent mode writes its events to Redis
     redis = client.get_db().connection
     started = time.perf_counter()

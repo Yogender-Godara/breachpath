@@ -6,7 +6,7 @@ EXACTLY the keys of core/fast_brains.investigate, so the pipeline, the report an
 """
 from pathlib import Path
 
-from agents.base import AgentSpec, run_agent
+from agents.base import AgentSpec, note_degraded, run_agent
 from agents.schemas import SUBMIT_TOOLS, FindingsOut
 from core import fast_brains
 from core.graph import queries
@@ -81,6 +81,7 @@ async def investigate(session, state, emit=None):
         problems = f"\nYour previous paths were invalid: {reasons[:300]}. Copy paths exactly from tool results."
     else:  # nothing usable twice: the fast brain answers, and the incident is marked degraded
         _note(emit, "falling back to the fast investigation", {"reason": reasons, "provider": result.provider})
+        note_degraded(state, "investigator", result.reason if result.degraded else "no valid path after a retry")
         return fast_brains.investigate(state), True
 
     llm = result.output

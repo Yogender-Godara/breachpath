@@ -22,7 +22,10 @@ def test_every_status_has_a_phase_and_a_status_line():
     assert {view.phase_of(s) for s in STATUSES} == set(view.PHASES)
     assert [view.phase_of(s) for s in ("QUEUED", "PREPARING", "EXECUTING", "REPORTING")] == ["INVESTIGATING", "PLANNING", "PLANNING", "VERIFYING"]
     assert all(view.phase_of(s) == "DONE" for s in TERMINAL)
-    assert view.status_line("PLANNING") == "🟡 PLANNING (2/3)" and view.status_line("QUEUED") == "🟡 INVESTIGATING (1/3)"
+    # the step (which phase) and the attempt (which fix attempt) are different things: "VERIFYING (3/3)" read like attempt 3 of 3
+    assert view.status_line("PLANNING") == "🟡 PLANNING · step 2/3 · attempt 1/3" and view.status_line("QUEUED") == "🟡 INVESTIGATING · step 1/3 · attempt 1/3"
+    assert view.status_line("VERIFYING", 0) == "🟡 VERIFYING · step 3/3 · attempt 1/3" and view.status_line("VERIFYING", 1) == "🟡 VERIFYING · step 3/3 · attempt 2/3"
+    assert view.status_line("DONE", 1) == "🟢 DONE · attempt 1/3" and view.status_line("NEEDS_HUMAN", 0) == "🟠 NEEDS_HUMAN"
     assert [view.status_line(s) for s in ("DONE", "DONE_NO_RISK", "NEEDS_HUMAN", "FAILED")] == ["🟢 DONE", "🟢 DONE_NO_RISK", "🟠 NEEDS_HUMAN", "🔴 FAILED"]
 
 
@@ -149,7 +152,8 @@ def app(monkeypatch):
     monkeypatch.setattr(api_client, "load_scenario", lambda sid: (calls.append(("load", sid)), {"graph": "g", "nodes": 128, "edges": 165})[1])
     monkeypatch.setattr(api_client, "analyze", lambda tenant, src: (calls.append(("analyze", tenant, src)), fast_result())[1])
     monkeypatch.setattr(api_client, "start_incident",
-                        lambda tenant, src, token: (calls.append(("start", tenant, src, token)), {"incident_id": "inc00001", "status": "QUEUED"})[1])
+                        lambda tenant, src, token, instructions="": (calls.append(("start", tenant, src, token, instructions)),
+                                                                     {"incident_id": "inc00001", "status": "QUEUED"})[1])
     monkeypatch.setattr(api_client, "events", lambda iid, after: {"events": [], "last_id": after})
     monkeypatch.setattr(api_client, "incident", lambda iid: {"status": "QUEUED", "plan": None, "report": None})
     monkeypatch.setattr(api_client, "eval_latest", lambda: (_ for _ in ()).throw(api_client.ApiError("NOT_FOUND", "no eval")))
@@ -241,10 +245,10 @@ def test_an_agent_run_starts_with_the_token_and_the_run_button_is_disabled_while
     app.sidebar.text_input[0].input("tok").run()
     app.sidebar.radio(key="mode").set_value("Agent").run()
     button(app, "Run").click().run()
-    assert not app.exception and app.api_calls == [("start", "s2", "user:ravi", "tok")]
+    assert not app.exception and app.api_calls == [("start", "s2", "user:ravi", "tok", "")]
     run = app.session_state["run"]
     assert run["mode"] == "agent" and run["incident_id"] == "inc00001"
-    assert button(app, "Run").disabled is True and any("INVESTIGATING (1/3)" in m.value for m in app.sidebar.markdown)
+    assert button(app, "Run").disabled is True and any("INVESTIGATING · step 1/3 · attempt 1/3" in m.value for m in app.sidebar.markdown)
     assert any("Waiting for the worker" in i.value for i in app.info)
 
 
@@ -266,3 +270,75 @@ def test_the_eval_tab_shows_the_table_the_paragraph_and_the_run_info(app, monkey
     assert any(m.value == "Everything is written from the numbers." for m in app.markdown)
     assert any(df.value.iloc[0]["scenario"] == "s2" for df in app.dataframe)
     assert not any("No evaluation results yet" in i.value for i in app.info)
+
+
+# --- operator instructions and the degraded steps (P7.7) ---
+
+LEGACY = "Max's team still uses the legacy role every quarter for audits. Don't change who can assume role s8-legacy."
+
+
+def test_the_operator_instructions_go_to_agent_mode_only_and_have_their_own_box(app):
+    box = app.sidebar.text_area[0]
+    assert box.label == "Operator instructions (agent mode)" and box.disabled is True  # like the Agent radio: it needs the demo token
+    assert app.sidebar.text_input[0].label == "Demo token" and [w.label for w in app.sidebar.selectbox][1] == "Src identity"  # NOT the src box
+    app.sidebar.text_input[0].input("tok").run()
+    app.sidebar.text_area[0].input(LEGACY).run()
+    app.sidebar.radio(key="mode").set_value("Agent").run()
+    button(app, "Run").click().run()
+    assert app.api_calls == [("start", "s2", "user:ravi", "tok", LEGACY)]
+
+
+def test_fast_mode_ignores_the_instruction_box(app):
+    app.sidebar.text_input[0].input("tok").run()
+    app.sidebar.text_area[0].input(LEGACY).run()  # typed, but the mode stays Fast
+    button(app, "Run").click().run()
+    assert app.api_calls == [("analyze", "s2", "user:ravi")]
+
+
+def instructed_result(honoured=True):
+    plan = {"cut_eids": ["e:s8:06"], "notes": "n", "safe": True, "max_flow": 1, "suggestion": None,
+            "reasons": [{"eid": "e:s8:06", "why": "Remove the statement from the policy: role:r → policy:p"}], "witness": {"e:s8:06": ["e:s8:05", "e:s8:06"]},
+            "simulation": {"collateral": {"count": 0, "weighted": 0}, "size": 1}, "alternatives": [{**ALT, "touches_avoided": []}, {**ALT, "cut_eids": ["e:s8:05"],
+                           "name": "source_side", "collateral": {"count": 0, "weighted": 0}, "touches_avoided": ["e:s8:05"]}],
+            "avoid": [{"eid": "e:s8:05", "quote": "Don't change who can assume role s8-legacy"}] if honoured else [],
+            "instruction": {"honoured": honoured, "note": "avoided e:s8:05" if honoured else "the quote is not in the instruction"},
+            "default_fix": {"cut_eids": ["e:s8:05"], "collateral": {"count": 0, "weighted": 0}, "size": 1} if honoured else None}
+    return {**fast_result(), "plan": plan, "instructions": LEGACY, "attempt": 1, "degraded_steps": []}
+
+
+def test_fix_and_proof_shows_the_instruction_the_avoided_edges_with_their_quotes_and_what_changed(app, monkeypatch):
+    monkeypatch.setattr(api_client, "analyze", lambda tenant, src: instructed_result())
+    button(app, "Run").click().run()
+    assert any(h.value == "Operator instruction" for h in app.subheader)
+    assert any(LEGACY in i.value for i in app.info)
+    texts = [m.value for m in app.markdown]
+    assert any(t.startswith("**Avoided e:s8:05**") and "Don't change who can assume role s8-legacy" in t for t in texts)
+    assert any(t.startswith("Without the instruction the fix would have been e:s8:05") and "because of it the fix is e:s8:06" in t for t in texts)
+    table = next(df.value for df in app.dataframe if "ruled out by the instruction" in df.value.columns)
+    assert list(table["ruled out by the instruction"]) == ["", "e:s8:05"]  # the default fix is ruled out, the other alternative is not
+
+
+def test_an_instruction_that_could_not_be_honoured_is_a_warning_never_hidden(app, monkeypatch):
+    monkeypatch.setattr(api_client, "analyze", lambda tenant, src: instructed_result(honoured=False))
+    button(app, "Run").click().run()
+    assert any("The instruction could not be honoured: the quote is not in the instruction" in w.value for w in app.warning)
+    assert not any(m.value.startswith("**Avoided") for m in app.markdown)
+
+
+def test_the_instruction_helpers():
+    state = {"instructions": LEGACY, "plan": instructed_result()["plan"]}
+    got = view.instruction_view(state)
+    assert got["text"] == LEGACY and got["honoured"] is True and got["avoid"][0]["eid"] == "e:s8:05"
+    assert got["changed"] == "Without the instruction the fix would have been e:s8:05 (collateral 0, weighted 0); because of it the fix is e:s8:06."
+    state["plan"]["default_fix"] = None
+    assert view.instruction_view(state)["changed"] == "The instruction did not change the fix."
+    assert view.instruction_view({"instructions": "", "plan": state["plan"]}) is None and view.instruction_view(None) is None
+    assert view.instruction_view({"instructions": "x", "plan": None})["honoured"] is False
+
+
+def test_the_sidebar_names_the_steps_that_fell_back_and_the_attempt(app, monkeypatch):
+    done = {**fast_result(), "attempt": 1, "degraded_steps": ["reporter: rate limit"], "instructions": ""}
+    monkeypatch.setattr(api_client, "analyze", lambda tenant, src: done)
+    button(app, "Run").click().run()
+    assert any("Fell back to the code: reporter: rate limit" in w.value for w in app.sidebar.warning)
+    assert any("🟢 DONE · attempt 1/3" in m.value for m in app.sidebar.markdown)

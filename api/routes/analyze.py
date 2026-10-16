@@ -50,6 +50,6 @@ def analyze(body: AnalyzeBody):
         redis.srem(active, state["id"])
     total = round((time.perf_counter() - started) * 1000)
     return {"incident_id": state["id"], "status": state["status"], "failure_detail": state.get("failure_detail"),
-            **{k: state[k] for k in ("findings", "plan", "action", "verdict", "report")},
+            **{k: state[k] for k in ("findings", "plan", "action", "verdict", "report", "attempt", "degraded", "degraded_steps")},
             "graph": build_view(state) if state["findings"] else None,  # fast-mode state is never stored, so the UI cannot ask /graph later
             "events": sink, "timings_ms": timings(sink, total)}

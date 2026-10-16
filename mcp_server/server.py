@@ -42,9 +42,9 @@ def choke_points(graph: str, src: str, top: int = 10) -> dict:
     return read.choke_points(graph, src, top)
 
 
-def compute_min_cut(graph: str, src: str) -> dict:
-    """Min-cut candidates that block every attack path from `src` while keeping business-critical edges (max-flow = min-cut). Returns candidates with witness paths, max_flow and `safe`. safe=false means every cut would break a business need."""
-    return read.compute_min_cut(graph, src)
+def compute_min_cut(graph: str, src: str, avoid_eids: list[str] | None = None, incident_id: str | None = None, lock_token: str | None = None) -> dict:
+    """Min-cut candidates that block every attack path from `src` while keeping business-critical edges (max-flow = min-cut). Returns candidates with witness paths, max_flow and `safe`. safe=false means every cut would break a business need. `avoid_eids`: edges the cut must NOT use (an operator instruction): the candidates are computed under that constraint (one throw-away copy, counts as a simulation); `safe` is then about the constrained problem and the result says which avoided edge makes a safe cut impossible."""
+    return read.compute_min_cut(graph, src, avoid_eids, incident_id, lock_token)
 
 
 def check_business_access(graph: str) -> dict:

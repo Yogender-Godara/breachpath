@@ -44,3 +44,16 @@ def test_models_forbid_extra_fields_and_check_the_enum():
     assert SUBMIT_TOOLS["submit_fix_plan"]["function"]["parameters"]["properties"]["chosen"]["enum"] == ["source_side", "sink_side", "custom"]
     with pytest.raises(ValidationError):
         FindingsOut(reachable_jewels=[], paths=[{"target": "t", "eids": [], "hops": 2}], truncated=False, notes="")
+
+
+def test_avoid_is_optional_for_pydantic_but_required_in_the_json_schema():
+    base = {"cut_eids": ["e:1"], "chosen": "custom", "reasons": [{"eid": "e:1", "why": "w"}], "notes": "n"}
+    assert FixPlanOut.model_validate(base).avoid == []  # an older cached answer without `avoid` is still valid
+    plan = FixPlanOut.model_validate({**base, "avoid": [{"eid": "e:2", "quote": "do not touch it"}]})
+    assert (plan.avoid[0].eid, plan.avoid[0].quote) == ("e:2", "do not touch it")
+    with pytest.raises(ValidationError):
+        FixPlanOut.model_validate({**base, "avoid": [{"eid": "e:2"}]})  # a quote is required for every avoided edge
+    with pytest.raises(ValidationError):
+        FixPlanOut.model_validate({**base, "avoid": [{"eid": "e:2", "quote": "q", "why": "extra"}]})
+    schema = SUBMIT_TOOLS["submit_fix_plan"]["function"]["parameters"]
+    assert "avoid" in schema["required"] and schema["properties"]["avoid"]["items"]["required"] == ["eid", "quote"]

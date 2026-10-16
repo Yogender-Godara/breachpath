@@ -1,6 +1,7 @@
 """Pure helpers for the UI (no Streamlit, no HTTP): phases, the graph as DOT, event rows, the proof checklist. Unit-tested."""
 from datetime import datetime
 
+from core.config import MAX_ATTEMPTS
 from orchestrator.state_machine import TERMINAL
 
 # The graph is redrawn only when the phase changes (docs/03_LLD.md section 15). Several statuses make one phase.
@@ -19,12 +20,14 @@ def phase_of(status):
     return "DONE" if status in TERMINAL else PHASE_OF[status]
 
 
-def status_line(status):
-    """'🟡 PLANNING (2/3)' while running, '🟢 DONE', '🟠 NEEDS_HUMAN', '🔴 FAILED'."""
+def status_line(status, attempt=None):
+    """'🟡 VERIFYING · step 3/3 · attempt 1/3' while running (step = the phase, attempt = the fix attempt out of MAX_ATTEMPTS: the two are
+    different things), '🟢 DONE', '🟠 NEEDS_HUMAN', '🔴 FAILED' at the end. `attempt` = state["attempt"] (verifications finished so far)."""
     if status in TERMINAL:
-        return f"{'🟢' if status.startswith('DONE') else '🟠' if status == 'NEEDS_HUMAN' else '🔴'} {status}"
+        icon = "🟢" if status.startswith("DONE") else "🟠" if status == "NEEDS_HUMAN" else "🔴"
+        return f"{icon} {status}" + (f" · attempt {attempt}/{MAX_ATTEMPTS}" if attempt else "")
     phase = phase_of(status)
-    return f"🟡 {phase} ({PHASES.index(phase) + 1}/3)"
+    return f"🟡 {phase} · step {PHASES.index(phase) + 1}/3 · attempt {(attempt or 0) + 1}/{MAX_ATTEMPTS}"
 
 
 def _esc(text):
@@ -104,9 +107,13 @@ def reason_lines(plan):
 
 def alternative_rows(plan):
     """The 'Alternatives considered' table: every simulated cut that was NOT chosen, with the numbers that made it lose."""
+    alts = plan.get("alternatives") or []
+    instructed = any("touches_avoided" in a for a in alts)  # an operator instruction was given: one more column, for every row
     return [{"cut": ", ".join(a["cut_eids"]), "label": a.get("name") or "", "blocks the attack": "yes" if a["blocks_attack"] and a["needs_ok"] else "NO",
              "pairs that lose access": a["collateral"]["count"], "weighted": a["collateral"]["weighted"], "size": a["size"],
-             "stale days": a["stale_days_total"], "decision": "rejected"} for a in plan.get("alternatives") or []]
+             "stale days": a["stale_days_total"], "decision": "rejected",
+             **({"ruled out by the instruction": ", ".join(a.get("touches_avoided", []))} if instructed else {})}
+            for a in alts]
 
 
 def tradeoff(plan):
@@ -118,8 +125,28 @@ def tradeoff(plan):
     chosen = f"Chosen {', '.join(plan['cut_eids'])}: {col['count']} (user, resource) pair(s) lose access (weighted {col['weighted']}), size {sim['size']}."
     rejected = [f"Rejected {', '.join(a['cut_eids'])}: {'blocks the attack' if a['blocks_attack'] and a['needs_ok'] else 'does not block the attack safely'}, "
                 f"but {a['collateral']['count']} (user, resource) pair(s) would lose access (weighted {a['collateral']['weighted']}), size {a['size']}."
+                + (f" It removes {', '.join(a['touches_avoided'])}, which the operator instruction rules out." if a.get("touches_avoided") else "")
                 for a in alts]
     return " ".join([chosen, *rejected])
+
+
+def instruction_view(state):
+    """What to show about an operator instruction: {text, honoured, note, avoid: [{eid, quote}], changed}. None when there was none.
+    `changed` = one sentence: the default fix versus the fix chosen under the instruction."""
+    if not (state or {}).get("instructions"):
+        return None
+    plan = state.get("plan") or {}
+    info = plan.get("instruction") or {"honoured": False, "note": "no plan was made"}
+    default = plan.get("default_fix")
+    if not info["honoured"]:
+        changed = ""
+    elif default:
+        c = default["collateral"]
+        changed = (f"Without the instruction the fix would have been {', '.join(default['cut_eids'])} (collateral {c['count']}, weighted {c['weighted']}); "
+                   f"because of it the fix is {', '.join(plan['cut_eids'])}.")
+    else:
+        changed = "The instruction did not change the fix."
+    return {"text": state["instructions"], "honoured": info["honoured"], "note": info["note"], "avoid": plan.get("avoid") or [], "changed": changed}
 
 
 def checks(verdict):

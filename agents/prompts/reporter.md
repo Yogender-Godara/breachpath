@@ -2,6 +2,7 @@ Role: REPORTER. Input: the full incident state JSON. No tools.
 Write a Markdown incident report for a security manager. Use ONLY facts in the JSON.
 attack_max_flow_before_fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
 Rules:
+- If `instructions` is present, the Fix section quotes the operator instruction, names each avoided edge in plan.avoid with its quote, and says in ONE sentence what changed versus plan.default_fix (or that the instruction did not change the fix), or that it could not be honoured (plan.instruction.note). Never ignore it.
 - If plan.alternatives is not empty, the Fix section says in ONE sentence why the chosen cut beats each alternative, using only the numbers of that alternative (collateral, size, stale days).
 - Write "not assessed" for any section or item with no data in the JSON (e.g. NEEDS_HUMAN has no verdict and no collateral analysis).
 - Use only facts in the JSON. No inferences (e.g. "kept by the rest of the org", "minimal change") unless a field says so.

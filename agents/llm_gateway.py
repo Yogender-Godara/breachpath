@@ -111,9 +111,10 @@ def _cache_set(key, data):
 # --- the call ---
 
 def _rejected_model_output(e):
-    """A 400 where the PROVIDER rejected the model's own malformed tool call (Groq: tool_use_failed). That is the model's slip, not our bug."""
+    """A 400 where the PROVIDER rejected the model's own malformed tool call (Groq: tool_use_failed, output_parse_failed). That is the model's slip, not our bug."""
     text = f"{e} {getattr(e, 'body', '')}".lower()
-    return isinstance(e, openai.BadRequestError) and (getattr(e, "code", None) == "tool_use_failed" or "tool call validation failed" in text)
+    return isinstance(e, openai.BadRequestError) and (getattr(e, "code", None) in ("tool_use_failed", "output_parse_failed")
+                                                       or "tool call validation failed" in text or "could not be parsed" in text)
 
 
 def _is_transient(e):

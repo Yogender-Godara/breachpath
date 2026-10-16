@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from agents import llm_gateway
-from agents.base import PREAMBLE
+from agents.base import PREAMBLE, note_degraded
 from agents.llm_gateway import LLMUnavailable
 from core import fast_brains
 from core.graph import queries
@@ -20,7 +20,7 @@ from core.graph.schema import EDGE_TYPES
 SYSTEM = f"{PREAMBLE}\n\n{(Path(__file__).parent / 'prompts' / 'reporter.md').read_text(encoding='utf-8').strip()}"
 TEMPERATURE = 0.2  # docs/06 section 6
 HEADINGS = ["Summary", "What was at risk", "Attack paths", "Fix", "Proof", "Business impact", "Next steps"]
-DEGRADED_LINE = "Generated in degraded mode (LLM step unavailable)."
+DEGRADED_LINE = fast_brains.DEGRADED_LINE  # the line without named steps; with steps see fast_brains.degraded_line
 MAX_PATHS, MAX_PAIRS, MAX_DETAIL = 5, 10, 400
 
 _TYPOGRAPHY = {**{c: "-" for c in [*range(0x2010, 0x2016), 0x2212]}, 0x00A0: " ", 0x202F: " "}  # U+2010-2015, minus sign; NBSP, narrow NBSP
@@ -58,6 +58,10 @@ def _slice(state, kinds):
     # The report is written while the status is still REPORTING; the pipeline makes it DONE right after.
     out = {k: state[k] for k in ("id", "tenant", "src", "degraded", "attempt")}
     out["status"] = "DONE" if state["status"] == "REPORTING" else state["status"]
+    if state.get("degraded_steps"):  # only when there are some: a normal run keeps the same messages (and LLM cache keys) as before
+        out["degraded_steps"] = list(state["degraded_steps"])
+    if state.get("instructions"):
+        out["instructions"] = state["instructions"]
     if state.get("failure_detail"):
         out["failure_detail"] = state["failure_detail"][:MAX_DETAIL]
     if f := state.get("findings"):
@@ -70,6 +74,7 @@ def _slice(state, kinds):
             "cut_eids": p["cut_eids"], "chosen": p["chosen"], "safe": p["safe"], "notes": p["notes"][:MAX_DETAIL],
             "reasons": p["reasons"], "witness": p["witness"], "suggestion": p["suggestion"],
             "alternatives": p.get("alternatives", []),
+            **({"avoid": p["avoid"], "instruction": p["instruction"], "default_fix": p["default_fix"]} if state.get("instructions") else {}),
             "simulation": sim and {"collateral": _collateral(sim["collateral"]), "size": sim["size"], "min_size": sim["min_size"]},
             "cut_actions": [{"eid": e, "action": EDGE_TYPES[kinds[e]]["remediation"], "host_action": bool(EDGE_TYPES[kinds[e]].get("host_action"))}
                             for e in p["cut_eids"] if e in kinds]}
@@ -129,16 +134,23 @@ def check(markdown, slice_):
     for alt in (slice_.get("plan") or {}).get("alternatives", []):
         # the eids alone are not enough (an alternative's edge can also be on the witness path): its collateral number must be there too
         missing = [e for e in alt["cut_eids"] if e not in slice_["plan"]["cut_eids"] and e not in fix]
-        no_number = not re.search(rf"(?<![\w.]){alt['collateral']['count']}(?![\w.])", fix)
+        no_number = not re.search(rf"(?<![\w.]){alt['collateral']['count']}(?!\w|\.\d)", fix)
         if fix.strip() and (missing or no_number):
             problems.append(f"the Fix section must say in one sentence why the chosen cut beats the alternative {', '.join(alt['cut_eids'])} "
                             f"(collateral {alt['collateral']['count']}, weighted {alt['collateral']['weighted']}, size {alt['size']}, stale days {alt['stale_days_total']}): "
                             f"name its eids and give its numbers")
+    if slice_.get("instructions") and fix.strip():  # the operator's instruction must be visible where the fix is explained
+        gone = [a["eid"] for a in (slice_["plan"] or {}).get("avoid", []) if a["eid"] not in fix]
+        if "instruction" not in fix.lower() or gone:
+            problems.append("an operator instruction was given: the Fix section must mention the instruction"
+                            + (f" and name the avoided edge(s) {', '.join(gone)}" if gone else "")
+                            + ", say what changed versus default_fix (or that nothing changed), or that it could not be honoured")
     if pronouns := dict.fromkeys(w.lower() for w in PRONOUN.findall(markdown)):
         problems.append(f"do not use pronouns for identities ({', '.join(pronouns)}): refer to them by id")
     for line in MODE_LINE.findall(markdown):
-        if not (slice_["degraded"] and line.strip("*_ ") == DEGRADED_LINE):  # the ONLY allowed one: the degraded line, when degraded
-            problems.append(f'remove the line "{line.strip()}": only the exact line "{DEGRADED_LINE}" is allowed, and only when degraded is true')
+        allowed = fast_brains.degraded_line(slice_.get("degraded_steps"))
+        if not (slice_["degraded"] and line.strip("*_ ") == allowed):  # the ONLY allowed one: the degraded line, when degraded
+            problems.append(f'remove the line "{line.strip()}": only the exact line "{allowed}" is allowed, and only when degraded is true')
     return problems
 
 
@@ -194,19 +206,22 @@ def write(state, emit=None):
     """-> (markdown, degraded). degraded is True when the template report was used instead of the LLM's."""
     slice_ = _slice(state, _cut_kinds(state))
     tally = {"llm_calls": 0, "provider": None, "model": None, "problems": []}
-    markdown, repaired = None, False
+    markdown, repaired, reasons = None, False, []
     for provider in llm_gateway.providers_for("reporter"):
         try:
             markdown, repaired = _ask(provider, slice_, emit, tally)
         except LLMUnavailable as e:
             _emit(emit, "step", f"Reporter provider {provider} unavailable: {e}", {"provider": provider, "reason": str(e)})
+            reasons.append(str(e))
             continue
         break  # a good report, or still bad after the retry: the template decides, not another provider
     degraded = markdown is None
     if degraded:
-        markdown = fast_brains.report({**state, "degraded": True})["markdown"]  # the same sections; adds the degraded line
-    elif state["degraded"] and DEGRADED_LINE not in markdown:
-        markdown = markdown.rstrip() + "\n\n" + DEGRADED_LINE
+        note_degraded(state, "reporter", "no LLM provider configured" if not tally["llm_calls"] and not reasons else "; ".join(reasons) if not tally["llm_calls"]
+                      else "fact check failed twice")
+        markdown = fast_brains.report({**state, "degraded": True})["markdown"]  # the same sections; adds the degraded line (with the steps)
+    elif state["degraded"] and fast_brains.degraded_line(state.get("degraded_steps")) not in markdown:
+        markdown = markdown.rstrip() + "\n\n" + fast_brains.degraded_line(state.get("degraded_steps"))
     markdown = markdown.rstrip() + "\n"
     source = "template" if degraded else "llm+repaired" if repaired else "llm"
     _emit(emit, "report", f"report from the {'template (fallback)' if degraded else 'LLM' + (' (Business impact repaired in code)' if repaired else '')}: {len(markdown)} chars",

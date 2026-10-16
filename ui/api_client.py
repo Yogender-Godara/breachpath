@@ -47,9 +47,10 @@ def analyze(tenant, src):
     return _call("POST", "/analyze", json={"tenant": tenant, "src": src})
 
 
-def start_incident(tenant, src, token):
-    """Agent mode: queues the job. -> {incident_id, status}"""
-    return _call("POST", "/incidents", json={"tenant": tenant, "src": src, "mode": "agent"}, headers={"X-Demo-Token": token})
+def start_incident(tenant, src, token, instructions=""):
+    """Agent mode: queues the job. -> {incident_id, status}. instructions: optional operator instruction (free text)."""
+    body = {"tenant": tenant, "src": src, "mode": "agent", **({"instructions": instructions} if instructions.strip() else {})}
+    return _call("POST", "/incidents", json=body, headers={"X-Demo-Token": token})
 
 
 def incident(incident_id):

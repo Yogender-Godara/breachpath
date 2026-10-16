@@ -224,7 +224,9 @@ def test_auth_blocked_or_unknown_model_fails_at_once_without_a_retry(fake, cls, 
 
 
 @pytest.mark.parametrize("body", [{"message": "Failed to call a function.", "type": "invalid_request_error", "code": "tool_use_failed"},
-                                  {"message": "Tool call validation failed: tool call validation failed: attempted to call tool 'x'", "type": "invalid_request_error"}])
+                                  {"message": "Tool call validation failed: tool call validation failed: attempted to call tool 'x'", "type": "invalid_request_error"},
+                                  {"message": "Parsing failed. The model generated output that could not be parsed. Please adjust your prompt.", "type": "invalid_request_error",
+                                   "code": "output_parse_failed"}])  # found live (P7.7, S2): the same slip, another code
 def test_a_400_for_the_models_malformed_tool_call_is_transient(fake, body):
     """Regression (P6.6 live, Groq): the provider rejected the MODEL's tool call with a 400. One retry, then the next provider / degrade."""
     fake.client = FakeClient(status_error(openai.BadRequestError, 400, body), completion("fine"))

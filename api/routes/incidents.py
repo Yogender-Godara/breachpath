@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.checks import check_target
 from api.errors import ApiError
@@ -29,6 +29,7 @@ class IncidentBody(BaseModel):
     tenant: str
     src: str
     mode: Literal["fast", "agent"]
+    instructions: str | None = Field(None, max_length=500)  # agent mode: an operator instruction in free text (/analyze ignores it)
 
 
 def _rate_limit(redis, ip):
@@ -64,7 +65,7 @@ def create_incident(body: IncidentBody, request: Request, x_demo_token: str | No
     if redis.scard("active:agent") >= config.MAX_ACTIVE_AGENT:
         raise ApiError(429, "BUSY", f"{config.MAX_ACTIVE_AGENT} agent incidents are already running: try again later")
 
-    state = new_state(body.tenant, body.src, "agent")
+    state = new_state(body.tenant, body.src, "agent", (body.instructions or "").strip())
     state_store.save(state)
     for key in (f"active:{body.tenant}", "active:agent"):  # the worker removes the id when the incident ends (P6.6)
         redis.sadd(key, state["id"])

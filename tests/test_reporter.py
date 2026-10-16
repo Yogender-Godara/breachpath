@@ -97,7 +97,8 @@ def test_a_missing_heading_twice_falls_back_to_the_template_and_degraded(s2, mon
     markdown, degraded = reporter.write(s2)
     assert degraded is True and len(gateway.calls) == 2
     assert markdown == fast_brains.report({**s2, "degraded": True})["markdown"]
-    assert markdown.endswith(reporter.DEGRADED_LINE + "\n") and [h for h in HEADINGS if f"## {h}" in markdown] == HEADINGS
+    assert s2["degraded_steps"] == ["reporter: fact check failed twice"]  # WHICH step fell back
+    assert markdown.endswith("Generated in degraded mode (reporter: fact check failed twice).\n") and [h for h in HEADINGS if f"## {h}" in markdown] == HEADINGS
 
 
 def test_still_bad_after_the_retry_does_not_try_the_next_provider(s2, monkeypatch):
@@ -415,3 +416,95 @@ def test_live_s5_report(states, monkeypatch):
     assert not degraded and final["source"].startswith("llm"), f"the template was used: {final}"
     assert reporter.check(markdown, slice_of(state)) == []
     assert "policy:s5-shared-ops" in markdown
+
+
+# --- operator instructions and the degraded steps (P7.7) ---
+
+LEGACY = "Max's team still uses the legacy role every quarter for audits. Don't change who can assume role s8-legacy."
+QUOTE = "Don't change who can assume role s8-legacy"
+
+
+def instructed(states, honoured=True):
+    """The S8 state as an agent run under an instruction would leave it: the instruction, the avoided edge with its quote, the default fix."""
+    state = copy.deepcopy(states["s8"])
+    state["instructions"] = LEGACY
+    plan = state["plan"]
+    if honoured:
+        plan.update(avoid=[{"eid": "e:s8:05", "quote": QUOTE}], instruction={"honoured": True, "note": "avoided e:s8:05"},
+                    default_fix={"cut_eids": ["e:s8:05"], "collateral": {"count": 0, "weighted": 0}, "size": 1})
+    else:
+        plan.update(instruction={"honoured": False, "note": "the quote 'x' for e:s8:05 is not a substring of the operator instruction"})
+    return state
+
+
+def test_the_slice_carries_the_instruction_only_when_there_is_one(states):
+    plain = slice_of(states["s8"])
+    assert "instructions" not in plain and not {"avoid", "instruction", "default_fix"} & set(plain["plan"])  # a normal run: the same messages as before
+    got = slice_of(instructed(states))
+    assert got["instructions"] == LEGACY and got["plan"]["avoid"] == [{"eid": "e:s8:05", "quote": QUOTE}] and got["plan"]["default_fix"]["cut_eids"] == ["e:s8:05"]
+    assert got["plan"]["instruction"] == {"honoured": True, "note": "avoided e:s8:05"} and len(reporter._dump(got)) < 6000
+    assert LEGACY in reporter._user_message(got)
+
+
+def test_the_template_shows_the_instruction_the_avoided_edges_and_what_changed_and_passes_the_guard(states):
+    state = instructed(states)
+    fix = template(state).split("## Fix")[1].split("## Proof")[0]
+    assert f'Operator instruction: "{LEGACY}"' in fix and f'- avoided e:s8:05, from the words: "{QUOTE}"' in fix
+    assert "Without the instruction the fix would have been e:s8:05 (collateral 0, weighted 0); because of the instruction it is e:s8:05." in fix
+    assert reporter.check(template(state), slice_of(state)) == []
+    state["plan"]["default_fix"] = None
+    assert "The instruction did not change the fix." in template(state)
+    not_honoured = instructed(states, honoured=False)
+    assert "The instruction could not be honoured: the quote 'x'" in template(not_honoured)
+    assert reporter.check(template(not_honoured), slice_of(not_honoured)) == []
+
+
+def test_the_fix_section_must_mention_the_instruction_and_name_the_avoided_edges(states):
+    state = instructed(states)
+    good = template(state)
+    fix = good.split("## Fix")[1].split("## Proof")[0]
+    quiet = good.replace(fix, "\n- Edit the role's trust policy: e:s8:05 has zero collateral. The rejected e:s8:07 would cost 12.\n\n")
+    problems = reporter.check(quiet, slice_of(state))
+    assert len(problems) == 1 and "the Fix section must mention the instruction, say what changed" in problems[0]  # e:s8:05 is named, "instruction" is not
+    unnamed = good.replace(fix, "\n- The operator instruction was applied. The rejected e:s8:07 would cost 12.\n\n")
+    assert "name the avoided edge(s) e:s8:05" in reporter.check(unnamed, slice_of(state))[0]
+    noted = good.replace(fix, "\n- The operator instruction was applied: e:s8:05 stays. The rejected e:s8:07 would cost 12.\n\n")
+    assert reporter.check(noted, slice_of(state)) == []
+    plain = slice_of(states["s8"])  # without an instruction nothing is required of the Fix section about it
+    assert not any("operator instruction" in p for p in reporter.check(quiet, plain))
+
+
+def test_the_degraded_line_names_the_steps_that_fell_back(states, monkeypatch):
+    state = copy.deepcopy(states["s2"])
+    state.update(degraded=True, degraded_steps=["planner: rate limit"])
+    line = "Generated in degraded mode (planner: rate limit)."
+    assert fast_brains.degraded_line(state["degraded_steps"]) == line and fast_brains.degraded_line([]) == reporter.DEGRADED_LINE
+    assert reporter.check(template({**state, "degraded": False}) + "\n" + line + "\n", slice_of(state)) == []
+    generic = reporter.check(template({**state, "degraded": False}) + "\n" + reporter.DEGRADED_LINE + "\n", slice_of(state))
+    assert len(generic) == 1 and "only the exact line" in generic[0]  # the generic line is no longer enough once the steps are known
+    Gateway(monkeypatch, say(template({**state, "degraded": False})))
+    markdown, degraded = reporter.write(state)
+    assert degraded is False and markdown.endswith(line + "\n")
+
+
+def test_the_reporters_own_fallback_is_named_in_the_state_and_in_the_line(s2, monkeypatch):
+    Gateway(monkeypatch, {"p1": [LLMUnavailable("429 RateLimitError")]})
+    markdown, degraded = reporter.write(s2)
+    assert degraded is True and s2["degraded_steps"] == ["reporter: rate limit"]
+    assert markdown.endswith("Generated in degraded mode (reporter: rate limit).\n")
+    Gateway(monkeypatch, {})
+    other = copy.deepcopy(s2)
+    other["degraded_steps"] = ["investigator: rate limit"]
+    reporter.write(other)
+    assert other["degraded_steps"] == ["investigator: rate limit", "reporter: no provider configured"]
+
+
+def test_a_number_at_the_end_of_a_sentence_counts_for_the_alternatives_collateral(states):
+    s8 = copy.deepcopy(states["s8"])
+    good = template(s8)
+    fix = good.split("## Fix")[1].split("## Proof")[0]
+    for tail in ("would cost 12.", "would cost 12, weighted 12.", "(12)"):
+        text = good.replace(fix, f"\n- e:s8:05 is cheaper: the rejected e:s8:07 {tail}\n\n")
+        assert not any("alternative e:s8:07" in p for p in reporter.check(text, slice_of(s8))), tail
+    text = good.replace(fix, "\n- e:s8:05 is cheaper than e:s8:07, which costs 12.5 units.\n\n")  # 12.5 is not 12
+    assert any("alternative e:s8:07" in p for p in reporter.check(text, slice_of(s8)))
