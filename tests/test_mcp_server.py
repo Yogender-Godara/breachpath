@@ -113,3 +113,10 @@ def test_writes_are_guarded_over_mcp(s2):
                                        "lock_token": "not-the-owner"})
     assert wrong["ok"] is False and wrong["error"]["code"] == "GUARD_REFUSED"  # a real sandbox, the wrong lock token
     assert client.ro_query(SBX, "MATCH ()-[r {eid: 'e:s2:05'}]->() RETURN count(r)")[0][0] == 1  # the edge is still there
+
+
+def test_compute_min_cut_has_the_avoid_parameter_and_the_guarded_ones_are_optional():
+    schema = {t.name: t.input_schema for t in tools("full")}["compute_min_cut"]
+    assert set(schema["properties"]) == {"graph", "src", "avoid_eids", "incident_id", "lock_token"}
+    assert schema["required"] == ["graph", "src"]  # avoid_eids and the guard values are optional: a normal call is unchanged
+    assert "avoid_eids" in {t.name: t.description for t in tools("full")}["compute_min_cut"]  # the model is told what it is for

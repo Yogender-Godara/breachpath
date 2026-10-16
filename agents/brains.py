@@ -1,12 +1,11 @@
 """The agent brains: the same three entry points as core/fast_brains.py, so core/pipeline.py swaps them with one line (D20).
 
 Each LLM step opens its OWN MCP stdio session inside asyncio.run and closes it before returning: no event loop is shared across
-threads, and a crashed MCP subprocess only affects that one step. The report is still the template: the Reporter LLM arrives in P7.1.
+threads, and a crashed MCP subprocess only affects that one step. The Reporter needs no session (no tools): plain sync code.
 """
 import asyncio
 
-from agents import base, investigator, planner
-from core import fast_brains
+from agents import base, investigator, planner, reporter
 from core.graph.mincut import MinCutError
 from orchestrator import events
 
@@ -49,4 +48,6 @@ def plan(state, *, lock_token):
 
 
 def report(state):
-    return fast_brains.report(state)  # the template report; the Reporter LLM arrives in P7.1
+    markdown, degraded = reporter.write(state, emit=_emitter(state, "reporter"))  # falls back to the template report itself
+    state["degraded"] = state["degraded"] or degraded
+    return {"markdown": markdown}

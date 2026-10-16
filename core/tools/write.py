@@ -6,7 +6,7 @@ In agent mode the worker injects these two values; the LLM never supplies them (
 import time
 
 from core import config
-from core.graph import queries
+from core.graph import mincut, queries
 from core.graph.client import delete_graph, get_db, get_graph, query, ro_query
 from core.graph.schema import baseline_name, sandbox_name
 from core.tools import collateral, guards, verify
@@ -49,6 +49,39 @@ def _apply(graph, eids):
     if deletable:
         query(graph, queries.APPLY_FIX, {"eids": deletable})
     return sorted(deletable), sorted(missing), sorted(refused), stale_total
+
+
+def min_cut_avoiding(sandbox, src, avoid, *, incident_id, lock_token):
+    """compute_min_cut under an operator constraint: the edges in `avoid` get cap = PROTECT_CAP on a throw-away copy (-sim-n, guarded, counts toward
+    the simulation quota, deleted in finally), then the candidates are computed as usual. Returns the min-cut dict + "avoided" (+ why it is
+    impossible when no safe cut is left)."""
+    guards.check_write(sandbox, incident_id, lock_token)
+    _check_eids(avoid)
+    _existing(sandbox)
+    avoid = sorted(set(avoid))
+    unknown = [eid for eid, found, _, _ in ro_query(sandbox, queries.EDGE_STATE, {"eids": avoid}) if not found]
+    if unknown:
+        raise BadInput(f"unknown eid(s) in avoid_eids: {unknown}")
+    plain = mincut.compute_min_cut(sandbox, src)  # without the constraint: tells whether the constraint is what makes a safe cut impossible
+    n = guards.check_quota(incident_id, "simulation")
+    sim = _name(sandbox_name, sandbox.split(":")[1], incident_id, f"-sim-{n}")
+    guards.check_write(sim, incident_id, lock_token)
+    get_graph(sandbox).copy(sim)
+    try:
+        protect_cap = ro_query(sim, queries.PROTECT_CAP)[0][0]
+        query(sim, queries.AVOID_EDGES, {"eids": avoid, "protect_cap": protect_cap})
+        cut = mincut.compute_min_cut(sim, src)
+    finally:
+        delete_graph(sim)
+    cut["avoided"] = avoid
+    if not cut["safe"]:
+        # the avoided edges on the flow that cannot be cut safely (the cut edges and their witness paths)
+        blocking = {e for c in cut["candidates"] for e in c["eids"]} | {e for c in cut["candidates"] for w in c["witness"].values() for e in w}
+        in_cut = sorted(set(avoid) & blocking)
+        cut["impossible_because"] = in_cut if plain["safe"] else []
+        cut["note"] = (f"no safe cut keeps {', '.join(in_cut)} untouched: every cut would have to remove it" if plain["safe"] and in_cut
+                       else "no safe cut exists" + (" even without the constraint" if not plain["safe"] else " under the constraint"))
+    return cut
 
 
 @tool

@@ -109,7 +109,7 @@ def test_a_missing_model_for_another_agent_is_llm_unavailable(fake):
 
 def test_an_unknown_agent_is_a_bug(fake):
     with pytest.raises(ValueError):
-        gw.chat("baseline", "p", MESSAGES)
+        gw.chat("nonsense", "p", MESSAGES)
 
 
 # --- chat: request building ---
@@ -123,6 +123,22 @@ def test_forced_tool_choice_is_downgraded_when_the_provider_cannot_force(fake, m
     assert plain["tool_choice"] == "auto" and "response_format" not in plain
     assert full["tool_choice"] == FORCED and full["response_format"] == {"type": "json_object"}
     assert (plain["model"], plain["temperature"], plain["max_tokens"]) == ("model-p", 0, config.LLM_MAX_TOKENS)
+
+
+def test_the_reporter_gets_its_own_max_tokens(fake, monkeypatch):
+    monkeypatch.setenv("MODEL_REPORTER_P", "model-r")
+    fake.client = FakeClient(completion(), completion())
+    gw.chat("reporter", "p", MESSAGES)
+    gw.chat("planner", "p", MESSAGES)
+    reporter, planner = fake.client.requests
+    assert (reporter["max_tokens"], planner["max_tokens"]) == (config.LLM_MAX_TOKENS_REPORTER, config.LLM_MAX_TOKENS)  # defaults 2500 / 2000 (docs/06 section 6)
+
+
+def test_the_baseline_agent_uses_the_planners_model_and_4000_max_tokens(fake):
+    fake.client = FakeClient(completion())
+    gw.chat("baseline", "p", MESSAGES)  # MODEL_BASELINE_P is not set: the Planner's MODEL_PLANNER_P is used
+    request, = fake.client.requests
+    assert (request["model"], request["max_tokens"]) == ("model-p", config.LLM_MAX_TOKENS_BASELINE) and config.LLM_MAX_TOKENS_BASELINE == 4000
 
 
 def test_chat_uses_the_given_providers_url_key_model_and_caps(fake, monkeypatch):
@@ -208,7 +224,9 @@ def test_auth_blocked_or_unknown_model_fails_at_once_without_a_retry(fake, cls, 
 
 
 @pytest.mark.parametrize("body", [{"message": "Failed to call a function.", "type": "invalid_request_error", "code": "tool_use_failed"},
-                                  {"message": "Tool call validation failed: tool call validation failed: attempted to call tool 'x'", "type": "invalid_request_error"}])
+                                  {"message": "Tool call validation failed: tool call validation failed: attempted to call tool 'x'", "type": "invalid_request_error"},
+                                  {"message": "Parsing failed. The model generated output that could not be parsed. Please adjust your prompt.", "type": "invalid_request_error",
+                                   "code": "output_parse_failed"}])  # found live (P7.7, S2): the same slip, another code
 def test_a_400_for_the_models_malformed_tool_call_is_transient(fake, body):
     """Regression (P6.6 live, Groq): the provider rejected the MODEL's tool call with a 400. One retry, then the next provider / degrade."""
     fake.client = FakeClient(status_error(openai.BadRequestError, 400, body), completion("fine"))
@@ -256,6 +274,15 @@ def test_a_cache_hit_skips_the_client_and_failures_are_not_cached(fake, monkeypa
     second = gw.chat("planner", "p", messages)  # this one must not
     assert (first.cached, second.cached, second.message.content) == (False, True, "first")
     assert len(fake.client.requests) == 2 and second.tokens_in == 5
+
+
+def test_an_empty_answer_is_returned_but_not_cached(fake, monkeypatch, clean_cache):
+    monkeypatch.setattr(config, "LLM_CACHE", True)
+    messages = [{"role": "user", "content": "unit-test-empty-answer"}]
+    fake.client = FakeClient(completion(""), completion("real"))
+    empty = gw.chat("planner", "p", messages)
+    again = gw.chat("planner", "p", messages)  # not served from the cache: the client is called again
+    assert (empty.message.content, again.message.content, again.cached) == ("", "real", False) and len(fake.client.requests) == 2
 
 
 def test_a_response_with_a_value_the_sdk_does_not_know_still_round_trips_through_the_cache(fake, monkeypatch, clean_cache):

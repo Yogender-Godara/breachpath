@@ -22,7 +22,8 @@ from core.graph.client import get_db
 
 log = logging.getLogger("breachpath.llm")
 
-AGENTS = ("investigator", "planner", "reporter")
+AGENTS = ("investigator", "planner", "reporter", "baseline")
+MODEL_OF = {"baseline": "planner"}  # the JSON-only eval baseline uses the Planner's model (a fair comparison, docs/06 section 6)
 DEFAULT_URLS = {"openrouter": "https://openrouter.ai/api/v1", "groq": "https://api.groq.com/openai/v1"}
 # source: VERIFY_RESULTS P1.4. An unknown provider gets all False: the safe default.
 CAPS = {"openrouter": {"forced_tool_choice": True, "parallel": True, "json_mode": True},
@@ -57,8 +58,9 @@ def _settings(agent, provider):
         raise ValueError(f"unknown agent {agent!r}: use one of {AGENTS}")
     name = provider.upper()
     url = os.getenv(f"{name}_BASE_URL") or DEFAULT_URLS.get(provider)
-    key, model = os.getenv(f"{name}_API_KEY"), os.getenv(f"MODEL_{agent.upper()}_{name}")
-    missing = [what for what, value in ((f"{name}_API_KEY", key), (f"{name}_BASE_URL", url), (f"MODEL_{agent.upper()}_{name}", model)) if not value]
+    model_var = f"MODEL_{MODEL_OF.get(agent, agent).upper()}_{name}"
+    key, model = os.getenv(f"{name}_API_KEY"), os.getenv(model_var)
+    missing = [what for what, value in ((f"{name}_API_KEY", key), (f"{name}_BASE_URL", url), (model_var, model)) if not value]
     if missing:
         raise LLMUnavailable(f"{provider} not configured for {agent}: set {', '.join(missing)}")
     return url, key, model
@@ -109,9 +111,10 @@ def _cache_set(key, data):
 # --- the call ---
 
 def _rejected_model_output(e):
-    """A 400 where the PROVIDER rejected the model's own malformed tool call (Groq: tool_use_failed). That is the model's slip, not our bug."""
+    """A 400 where the PROVIDER rejected the model's own malformed tool call (Groq: tool_use_failed, output_parse_failed). That is the model's slip, not our bug."""
     text = f"{e} {getattr(e, 'body', '')}".lower()
-    return isinstance(e, openai.BadRequestError) and (getattr(e, "code", None) == "tool_use_failed" or "tool call validation failed" in text)
+    return isinstance(e, openai.BadRequestError) and (getattr(e, "code", None) in ("tool_use_failed", "output_parse_failed")
+                                                       or "tool call validation failed" in text or "could not be parsed" in text)
 
 
 def _is_transient(e):
@@ -149,6 +152,11 @@ def _create(client, request):
             time.sleep(wait)
 
 
+def max_tokens(agent):
+    """docs/06 section 6: Reporter 2500, the JSON baseline 4000 (it answers with paths and a cut), the others 2000."""
+    return {"reporter": config.LLM_MAX_TOKENS_REPORTER, "baseline": config.LLM_MAX_TOKENS_BASELINE}.get(agent, config.LLM_MAX_TOKENS)
+
+
 def chat(agent, provider, messages, tools=None, tool_choice="auto", temperature=0, response_format=None):
     url, key, model = _settings(agent, provider)
     flags = CAPS.get(provider, NO_CAPS)
@@ -162,14 +170,15 @@ def chat(agent, provider, messages, tools=None, tool_choice="auto", temperature=
     data = _cache_get(ckey) if ckey else None
     cached = data is not None
     if not cached:
-        request = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": config.LLM_MAX_TOKENS}
+        request = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens(agent)}
         if tools:
             request.update(tools=tools, tool_choice=tool_choice)
         if response_format:
             request["response_format"] = response_format
         data = _create(_client(provider, url, key), request).model_dump(mode="json", warnings=False)
-        if ckey:
-            _cache_set(ckey, data)  # only successful responses reach this line
+        message = data["choices"][0]["message"]
+        if ckey and (message.get("content") or message.get("tool_calls")):  # an EMPTY answer (a reasoning model out of tokens) is not cached
+            _cache_set(ckey, data)
     ms = round((time.perf_counter() - started) * 1000)
     usage = data.get("usage") or {}
     result = LLMResult(ChatCompletionMessage.model_validate(data["choices"][0]["message"]), provider, model,

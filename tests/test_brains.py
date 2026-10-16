@@ -1,7 +1,7 @@
 """The agent brains (agents/brains.py): the pipeline in agent mode with the Investigator/Planner agents faked (no LLM), real MCP sessions + FalkorDB."""
 import pytest
 
-from agents import brains, investigator, planner
+from agents import brains, investigator, planner, reporter
 from agents.base import ToolCrashed
 from core import fast_brains
 from core.graph import client, loader
@@ -22,6 +22,7 @@ def run_pipeline(monkeypatch, investigate_degraded=False, plan_error=None, plan_
         return fast_brains.plan(state, lock_token=lock_token), plan_degraded
     monkeypatch.setattr(investigator, "investigate", fake_investigate)
     monkeypatch.setattr(planner, "plan", fake_plan)
+    monkeypatch.setattr(reporter, "write", lambda state, emit=None: (fast_brains.report(state)["markdown"], False))  # no LLM here
     loader.load_scenario("s2")
     state = new_state("s2", "user:ravi", "agent")
     redis = client.get_db().connection
@@ -73,7 +74,16 @@ def test_the_agents_events_go_to_the_incidents_redis_stream_with_the_agents_name
     assert (event["latency_ms"], event["tokens_in"], event["tokens_out"]) == (5, 11, 3)
 
 
-def test_the_report_is_still_the_template(falkordb):
+def test_the_report_comes_from_the_reporter_and_a_fallback_marks_the_incident_degraded(monkeypatch):
     state = new_state("s2", "user:ravi", "agent")
-    state.update(status="DONE_NO_RISK", findings={"reachable_jewels": [], "paths": [], "truncated": False})
-    assert brains.report(state) == fast_brains.report(state)
+    seen = {}
+
+    def fake_write(state, emit=None):
+        seen["emit"] = emit
+        return "the report", seen["degraded"]
+    monkeypatch.setattr(reporter, "write", fake_write)
+    seen["degraded"] = False
+    assert brains.report(state) == {"markdown": "the report"} and state["degraded"] is False and callable(seen["emit"])
+    seen["degraded"] = True  # the Reporter fell back to the template
+    brains.report(state)
+    assert state["degraded"] is True

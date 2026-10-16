@@ -127,6 +127,11 @@ RETURN r.eid AS eid, a.id AS u, b.id AS v, r.cap AS cap, r.kind AS kind,
        r.last_used_days AS stale_days
 """)
 
+# The users of a graph (the UI's src dropdown: a src must be a User)
+USER_IDS = """
+MATCH (u:User) RETURN u.id AS id ORDER BY u.id
+"""
+
 # Node rows for the UI sub-graph (GET /incidents/{id}/graph)
 GRAPH_NODES = """
 MATCH (n:Asset) RETURN n.id AS id, labels(n) AS labels, n.name AS name, coalesce(n.crown_jewel, false) AS crown_jewel
@@ -210,6 +215,14 @@ MATCH ()-[r:{T}]->()
 WHERE r.eid = eid AND coalesce(r.protected, false) = false
 DELETE r
 RETURN count(*) AS deleted
+""")
+
+# Operator instruction: edges the cut must not use get cap = $protect_cap on a throw-away copy (they are NOT marked protected)
+AVOID_EDGES = _fmt("""
+UNWIND $eids AS eid
+MATCH ()-[r:{T}]->() WHERE r.eid = eid
+SET r.cap = $protect_cap
+RETURN count(r)
 """)
 
 # Split simulation writes (sandbox only): a node copy per label, edge create / delete, protected caps reset

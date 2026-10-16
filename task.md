@@ -24,13 +24,13 @@
 | P4 Core tools and guards | Day 2 | ✅ | 26 / 26 |
 | P5 Pipeline, state and API (fast mode) | Day 2 | 🟨 | 15 / 17 |
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
-| P7 Reporter and UI | Day 3 | ⬜ | 0 / 12 |
-| P8 Evaluation | Day 3 | ⬜ | 0 / 9 |
+| P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
+| P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
 | P9 Hardening and deploy | Day 3 | ⬜ | 0 / 11 |
 | P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **136 / 203** |
+| **Total** | | | **159 / 209** |
 
-**Now working on:** P6.7 Review ⑥ + Day 2 gate (you), then P7.1 Reporter
+**Now working on:** P8.3 Review ⑧ (yours): read the eval table
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -357,7 +357,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ### P6.6 Agent-mode pipeline and worker ✅ 🤖
 - [x] `run_incident(mode="agent")` uses the LLM brains, checkpoints and events after each step
-- [x] `worker/main.py`: consume `jobs`, take the lock + heartbeat, one MCP session per agent step (opened and closed inside the step), janitor (sandbox TTL)
+- [x] `worker/main.py`: consume `jobs`, take the lock + heartbeat, one MCP session per agent step (a crash only affects that step), janitor (sandbox TTL)
 - [x] Add `worker` + `api` services to `docker-compose.yml`
 
 **Done when:** `POST /incidents` on S2 → status `DONE` with live events.
@@ -371,31 +371,42 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P7: Reporter and UI (Day 3)
 
-### P7.1 Reporter ⬜ 🤖
-- [ ] Prompt from [06 §4](docs/06_Agent_Prompts_and_Schemas.md) (remediation verbs, collateral, proof)
-- [ ] Template fallback report (the same sections)
+### P7.1 Reporter ✅ 🤖
+- [x] Prompt from [06 §4](docs/06_Agent_Prompts_and_Schemas.md) (remediation verbs, collateral, proof)
+- [x] Template fallback report (the same sections)
 
 **Done when:** the S2 and S5 reports read well and contain only facts from the state.
 
-### P7.2 Streamlit layout ⬜ 🤖
-- [ ] Sidebar: scenario, load, src, mode, demo token, run, status
-- [ ] Tabs: Attack graph · Agent timeline · Fix & proof · Report · Eval
+### P7.2 Streamlit layout ✅ 🤖
+- [x] Sidebar: scenario, load, src, mode, demo token, run, status
+- [x] Tabs: Attack graph · Agent timeline · Fix & proof · Report · Eval
 
 **Done when:** you can start fast and agent runs from the UI.
 
-### P7.3 Graph tab ⬜ 🤖
-- [ ] Graph component (or the static-image fallback, R17)
-- [ ] Sub-graph rules + colours ([LLD §15](docs/03_LLD.md))
-- [ ] Redraw only on phase change, cached in `session_state`
+### P7.3 Graph tab ✅ 🤖
+- [x] Graph component (or the static-image fallback, R17)
+- [x] Sub-graph rules + colours ([LLD §15](docs/03_LLD.md))
+- [x] Redraw only on phase change, cached in `session_state`
 
 **Done when:** S2 shows its paths, cut edges and protected edges clearly.
 
-### P7.4 Timeline, Fix & proof, Report tabs ⬜ 🤖
-- [ ] Timeline in `st.fragment(run_every=1s)` with short polls
-- [ ] Fix & proof: cut edges + reasons + witnesses, ✅/❌ checks, collateral, suggestion (verified or not)
-- [ ] Report tab (Markdown)
+### P7.4 Timeline, Fix & proof, Report tabs ✅ 🤖
+- [x] Timeline in `st.fragment(run_every=1s)` with short polls
+- [x] Fix & proof: cut edges + reasons + witnesses, ✅/❌ checks, collateral, suggestion (verified or not)
+- [x] Report tab (Markdown)
 
 **Done when:** a live agent run updates smoothly without page flicker.
+*Built and tested headless (Streamlit AppTest + the real API and worker: fast run, agent run QUEUED → DONE with 23 live events). **Still to check by eye in a browser (P7.5):** no flicker during an agent run, and the graph look.*
+
+### P7.7 Operator instructions ✅ 🤖
+- [x] `compute_min_cut(avoid_eids)`: guarded throw-away copy with those edges at `PROTECT_CAP`; unknown eid = BAD_INPUT; says which avoided edge makes a safe cut impossible
+- [x] `POST /v1/incidents` accepts `instructions` (≤ 500 chars, stored in the state); UI text area (agent mode); the instruction is shown at the top of Fix & proof
+- [x] Planner: instruction in the task, `submit_fix_plan.avoid [{eid, quote}]`, code checks (eid exists, quote is a substring, no avoided eid in the cut, `simulate_cut` verified), one retry, else the code candidate with an "instruction could not be honoured" note
+- [x] Report + Fix & proof: the instruction, the avoided edges with their quotes, one sentence on what changed versus the default fix
+- [x] Tests with a fake LLM, and live demo tests (S8 legacy role, S2 build server)
+- [x] UI status "VERIFYING · step 3/3 · attempt 1/3"; `state["degraded_steps"]` shown in the UI and the report line
+
+**Done when:** an LLM run gives a DIFFERENT, still-proven result than fast mode (S8: `e:s8:06` instead of `e:s8:05`; S2: a cut without `e:s2:10`).
 
 ### P7.5 Review ⑦ 👤
 - [ ] Walk through the UI on S2, S5 and S8
@@ -405,18 +416,18 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P8: Evaluation (Day 3)
 
-### P8.1 Metrics and baselines ⬜ 🤖
-- [ ] `eval/metrics.py`: blast-radius recall, path recall@20, precision, fix gap, residual, broken needs, collateral, verdict, latency, tokens
-- [ ] Baselines: B-disable, B-betweenness, B-frequency (scored by networkx)
-- [ ] `eval/baseline_json_llm.py` (same model as the Planner, JSON mode, invalid JSON = fail)
-- [ ] `eval/bruteforce.py` (optimum, ≤ 25 candidates)
+### P8.1 Metrics and baselines ✅ 🤖
+- [x] `eval/metrics.py`: blast-radius recall, path recall@20, precision, fix gap, residual, broken needs, collateral, verdict, latency, tokens
+- [x] Baselines: B-disable, B-betweenness, B-frequency (scored by networkx)
+- [x] `eval/baseline_json_llm.py` (same model as the Planner, JSON mode, invalid JSON = fail)
+- [x] `eval/bruteforce.py` (optimum, ≤ 25 candidates)
 
 **Done when:** each baseline runs on S2.
 
-### P8.2 Eval run ⬜ 🤖
-- [ ] `eval/run_eval.py`: S1–S8 × (fast, agent, 4 baselines) → table; provider and model recorded per row
-- [ ] Save `eval/results/latest.json` + Markdown table; `/eval/latest`; Eval tab
-- [ ] Throttle for free-tier limits; use the response cache
+### P8.2 Eval run ✅ 🤖
+- [x] `eval/run_eval.py`: S1–S8 × (fast, agent, 4 baselines) → table; provider and model recorded per row
+- [x] Save `eval/results/latest.json` + Markdown table; `/eval/latest`; Eval tab
+- [x] Throttle for free-tier limits; use the response cache
 
 **Done when:** the full table exists, honest whatever the result.
 
@@ -496,8 +507,16 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
-| Oct 15 | MCP session per agent step (P6.6) | LLD 5 / HLD 5.4: one MCP stdio subprocess per worker process, restarted on crash → one stdio session per agent step (Investigate, Plan), opened and closed inside the step with `asyncio.run`; the worker is a plain sync loop | No event loop shared across threads; a crashed MCP subprocess only affects one step; no restart logic to write | Yes (LLD §5, §8, HLD §5.4, §9) |
-| Oct 15 | A 400 for the model's bad tool call (P6.6) | LLD 6.1: any other 4xx is raised as our bug → a 400 where the provider rejected the MODEL's own malformed tool call (Groq `tool_use_failed`) is transient: one retry, then the next provider, then degrade | Found live (S5, Groq): the incident ended FAILED because of one model slip | Yes (LLD §6.1) |
+| Oct 16 | Operator instructions (P7.7) | agent mode accepts a free-text operator instruction; the Planner turns it into graph constraints; code re-computes and proves | A case where the LLM gives a DIFFERENT, still-proven result than fast mode. The LLM only maps words to edges (`avoid` + quotes); the code checks the quotes and eids, recomputes the cut under the constraint (`compute_min_cut(avoid_eids)`, a guarded copy that counts as a simulation) and verifies with `simulate_cut`. `avoid` is optional in Pydantic so cached answers stay valid; the instruction block is added to the prompt only when there is an instruction (a normal run keeps its cache keys). Also: `degraded_steps` names which step fell back; the status line separates step from attempt | Yes (LLD §5, §6.2, §7.2, §9, §15; docs/06 §3) |
+| Oct 16 | Plan `alternatives` (P7) | A plan recorded only the chosen cut → also `alternatives`: every simulated cut NOT chosen with its collateral, size, staleness and blocks_attack/needs_ok, filled in code from `simulate_cut` (planner and fast mode); shown in Fix & proof, the Reporter slice and the template. The Reporter guard requires the Fix section to name each alternative and its collateral number | The trade-off (why this cut and not the other) is the demo's key sentence; the prompt alone was ignored by the model in a live S8 run | Yes (LLD §6.2, §9, §15, docs/06 §4) |
+| Oct 16 | JSON baseline prompt is compact (P8.1) | docs/06 §5: the whole graph as JSON (nodes with label + crown_jewel, edges as objects) → the same information as rows: `crown_jewels` + edges `[eid, type, src, dst]` + valid needs `[principal, resource]` | The full JSON is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413); no other provider has a key. A node's label is its id prefix, and a node with no edge cannot matter | Yes (docs/06 §5, LLD §11) |
+| Oct 16 | Eval table layout (P8.2) | "rows = scenarios, columns = metric × method" → rows = scenarios, columns = methods, each cell packs that method's metrics (cut and gap, residual, broken, collateral, recall/precision, verdict); the full numbers are in `latest.json` | 8 metrics × 6 methods is about 35 columns: unreadable in Markdown and in the UI | Yes (LLD §11) |
+| Oct 16 | Graph component (P7.3) | LLD §15: `streamlit-agraph` (vis.js) [VERIFY], graphviz as fallback → `st.graphviz_chart` with a DOT string (the R17 fallback) | No new dependency, no graphviz binary (the browser draws it with viz.js), and the DOT is easy to unit-test; the layout is automatic. Not interactive (no drag) | Yes (LLD §15) |
+| Oct 16 | `/analyze` returns the graph (P7.3) | `/analyze` → `{findings, plan, verdict, timings_ms}` → also `graph` (the same view as `GET /incidents/{id}/graph`) | A fast state is never stored, so the UI cannot ask `/graph` afterwards, and the UI has no database access | Yes (LLD §9) |
+| Oct 16 | Reporter repair + template (P7.1) | A bad Business impact (collateral claim without data) after the retry → template → the code replaces that section with "Not assessed…" (`llm+repaired`); the template says "not assessed" too and passes the same guard | One unsupported sentence should not throw away a good report | Yes (LLD §6.2, docs/05 R26) |
+| Oct 16 | Reporter model (P7.1) | `MODEL_REPORTER_GROQ` `openai/gpt-oss-20b` → `openai/gpt-oss-120b` (same as the Investigator and Planner) | 20B ignored rules the guard can't check; 1-2 calls per incident, so 120B is affordable | Yes (env.example, VERIFY_RESULTS) |
+| Oct 16 | MCP session per agent step (P6.6) | HLD 5.4 / LLD §5: one MCP stdio subprocess per worker process, restarted on a crash → each LLM step (Investigator, Planner) opens its OWN session inside `asyncio.run` and closes it before returning; no restart logic | The worker and pipeline are plain sync code: one long-lived session would need an event loop shared across threads; a crashed subprocess now only affects the one step (`ToolCrashed` → the pipeline decides) | Yes (HLD §5.4, LLD §5, §6.1) |
+| Oct 16 | Groq 400 `tool_use_failed` (P6.6) | LLD 6.1: any other 4xx is raised as-is (our bug) → a 400 where the provider rejected the model's own malformed tool call (`tool_use_failed` / "tool call validation failed") is TRANSIENT: 1 retry, then `LLMUnavailable` → the next provider → degrade to the fast brains | It is the model's slip, not our request, so it must not fail the incident while another provider may answer correctly. Any other 400/422 is still raised | Yes (LLD §6.1) |
 | Oct 15 | Injected tool params (cache follow-up) | LLD 6.1: only `incident_id` and `lock_token` are hidden from the LLM → any param the code already knows (`graph`, `sandbox`, `src`) is injected too (`run_agent(inject=...)`); tool results are compact and key-sorted; the code sets the plan label (`chosen`) from the min-cut candidate names | The incident id in the messages defeated the cache across incidents; fewer arguments for the model to get wrong; fewer tokens | Yes (LLD §6.1, §6.2, docs/06) |
 | Oct 15 | Planner rules (P6.5) | LLD 6.2: the LLM plans every time → no LLM call when the cut is not safe or after a failed Planner cut; a cut is accepted only if simulated ok AND without protected/missing edges; no set is ever simulated twice (a repeated `simulate_cut` is answered from the results already seen) | The split suggestion is proven in code (the LLM adds nothing, and free calls are scarce); `simulate_cut` is limited to 6 per incident and a provider restart re-runs the agent | Yes (LLD §6.2, §16, docs/06 §3) |
 | Oct 15 | LLM 429 wait (P6.5) | One retry after 1.5 s → a 429 waits for its `retry-after` header (capped at `LLM_MAX_WAIT_S` = 20 s), then retries once | Groq's 8000 tokens/minute: back-to-back agents hit 429, and 1.5 s is far too short | Yes (LLD §6.1, §12) |

@@ -107,6 +107,7 @@ def test_all_paths_invalid_retries_once_with_the_reasons_then_falls_back_to_the_
     events = []
     (result, degraded), state = investigate("s2", "user:ravi", emit=lambda t, m, d, **kw: events.append((t, m, d)))
     assert degraded is True and result == fast_brains.investigate(state)
+    assert state["degraded_steps"] == ["investigator: no valid path after a retry"]  # WHICH step fell back
     assert len(gw.calls) == 2 and "Your previous paths were invalid" not in gw.calls[0]["messages"][1]["content"]
     retry = gw.calls[1]["messages"]
     assert [m["role"] for m in retry] == ["system", "user"]  # a fresh conversation

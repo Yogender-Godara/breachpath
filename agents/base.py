@@ -27,6 +27,30 @@ ALWAYS_HIDDEN = ("incident_id", "lock_token")  # never in the LLM's schema; the 
 MAX_TOOL_RESULT_CHARS = 6000  # token budget
 
 
+def short_reason(reason):
+    """A short, readable label for why an LLM step fell back (shown in the UI and the report line): 'rate limit', 'provider timeout'..."""
+    r = (reason or "").lower()
+    if "ratelimit" in r or "rate limit" in r or "429" in r:
+        return "rate limit"
+    if "no llm provider configured" in r:
+        return "no provider configured"
+    if "timeout" in r or "connection" in r:
+        return "provider timeout"
+    if any(w in r for w in ("403", "401", "permission", "authentication")):
+        return "provider refused the call"
+    if "badrequest" in r or "could not be parsed" in r or "tool_use_failed" in r:
+        return "model output unusable"  # the provider rejected the model's own malformed output (twice)
+    return (reason or "unknown")[:80]
+
+
+def note_degraded(state, step, reason):
+    """Record WHICH step fell back to the code (state["degraded_steps"]), e.g. 'reporter: rate limit'."""
+    steps = state.setdefault("degraded_steps", [])
+    label = f"{step}: {short_reason(reason)}"
+    if label not in steps:
+        steps.append(label)
+
+
 class ToolCrashed(Exception):
     """An MCP tool raised an exception (not a normal {"ok": false} error). The pipeline turns a MinCutError into NEEDS_HUMAN."""
 
@@ -56,7 +80,7 @@ class AgentResult:
 
 @asynccontextmanager
 async def open_session(profile="full"):
-    """One stdio MCP subprocess + session. The worker (P6.6) owns one per process; tests open their own.
+    """One stdio MCP subprocess + session. The brains open one per agent step (agents/brains.py); tests open their own.
     Catch run_agent's exceptions (ToolCrashed...) INSIDE the `async with`: anyio wraps one that leaves it in an ExceptionGroup."""
     async with stdio_client(server_params(profile)) as (read, write):
         async with ClientSession(read, write) as session:

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from api.checks import check_target
+from api.graph_view import build_view
 from api.routes.scenarios import ACTIVE_TTL_S
 from core.graph.client import get_db
 from core.graph.schema import sandbox_name
@@ -49,5 +50,6 @@ def analyze(body: AnalyzeBody):
         redis.srem(active, state["id"])
     total = round((time.perf_counter() - started) * 1000)
     return {"incident_id": state["id"], "status": state["status"], "failure_detail": state.get("failure_detail"),
-            **{k: state[k] for k in ("findings", "plan", "action", "verdict", "report")},
+            **{k: state[k] for k in ("findings", "plan", "action", "verdict", "report", "attempt", "degraded", "degraded_steps")},
+            "graph": build_view(state) if state["findings"] else None,  # fast-mode state is never stored, so the UI cannot ask /graph later
             "events": sink, "timings_ms": timings(sink, total)}

@@ -35,11 +35,17 @@ class ReasonOut(Strict):
     why: str
 
 
+class AvoidOut(Strict):
+    eid: str
+    quote: str  # the exact words of the operator instruction that rule this edge out
+
+
 class FixPlanOut(Strict):
     cut_eids: list[str]
     chosen: Literal["source_side", "sink_side", "custom"]
     reasons: list[ReasonOut]
     notes: str
+    avoid: list[AvoidOut] = []  # a default, so an answer without it (an older cached one, or no instruction) is still valid
 
 
 def _tool(name, description, parameters):
@@ -61,9 +67,12 @@ SUBMIT_TOOLS = {
             "notes": {"type": "string"}}}),
     "submit_fix_plan": _tool("submit_fix_plan", "Submit the chosen fix plan. Call exactly once, when you are done.", {
         "type": "object", "additionalProperties": False,
-        "required": ["cut_eids", "chosen", "reasons", "notes"],
+        "required": ["cut_eids", "chosen", "reasons", "notes", "avoid"],
         "properties": {
             "cut_eids": _STRINGS,
+            "avoid": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False, "required": ["eid", "quote"],
+                "properties": {"eid": {"type": "string"}, "quote": {"type": "string"}}}},
             "chosen": {"type": "string", "enum": ["source_side", "sink_side", "custom"]},
             "reasons": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False, "required": ["eid", "why"],

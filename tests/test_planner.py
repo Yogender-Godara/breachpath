@@ -17,7 +17,7 @@ from orchestrator.lock import hold_lock
 from orchestrator.state import new_state
 from tests.agent_fakes import Gateway, message
 
-FAST_KEYS = {"cut_eids", "chosen", "source", "reasons", "notes", "safe", "max_flow", "witness", "simulation", "suggestion"}
+FAST_KEYS = {"cut_eids", "chosen", "source", "reasons", "notes", "safe", "max_flow", "witness", "simulation", "suggestion", "alternatives", "avoid", "instruction", "default_fix"}
 S8 = ("s8", "user:max")  # source_side [e:s8:05] has collateral 0, sink_side [e:s8:07] has collateral 12
 
 
@@ -110,6 +110,9 @@ def test_a_simulated_choice_is_accepted_and_enriched_in_code(db, monkeypatch):
     assert plan["witness"] == {"e:s8:05": ["e:s8:01", "e:s8:05", "e:s8:06", "e:s8:07"]}  # the attack path it cuts
     assert plan["reasons"][0]["eid"] == "e:s8:05" and "Planner: a stale legacy role (300 days)" in plan["reasons"][0]["why"]
     assert plan["notes"] == "Zero collateral. size 1 vs minimum 1."
+    # the trade-off: the cut it did NOT take, from the simulate_cut result (code, never the LLM)
+    assert plan["alternatives"] == [{"cut_eids": ["e:s8:07"], "name": "sink_side", "blocks_attack": True, "needs_ok": True,
+                                     "collateral": {"count": 12, "weighted": 12}, "size": 1, "stale_days_total": 150}]
     final = [d for t, m, d in events if t == "plan"][0]
     assert final == {"chosen": "source_side", "cut_eids": ["e:s8:05"], "source": "planner", "llm_choice": ["e:s8:05"], "llm_chosen": "source_side", "accepted": True,
                      "collateral": 0, "sims_used": 2, "provider": "fake", "turns": 2}
@@ -122,6 +125,7 @@ def test_a_cut_the_llm_never_simulated_is_simulated_once_in_code_then_accepted(d
         plan, degraded = run_plan(state, token)
         used = sims_used(state)
     assert not degraded and plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:05"] and used == 1
+    assert plan["alternatives"] == []  # nothing else was simulated: nothing to compare
 
 
 def test_the_label_is_set_by_the_code_not_by_the_llm(db, monkeypatch):
@@ -247,3 +251,135 @@ def test_live_s2_gives_a_valid_accepted_plan(db, monkeypatch):
     plan, degraded, final = r["plan"], r["degraded"], r["final"]
     assert not degraded and plan["source"] == "planner", f"the code overrode the LLM: {final}"
     assert plan["simulation"]["blocks_attack"] and plan["simulation"]["needs_ok"] and len(plan["cut_eids"]) == plan["max_flow"] == 2
+
+
+
+# --- operator instructions (P7.7): the Planner maps free text to edges to avoid; the code checks, recomputes and proves ---
+
+LEGACY = "Max's team still uses the legacy role every quarter for audits. Don't change who can assume role s8-legacy."
+QUOTE = "Don't change who can assume role s8-legacy"
+
+
+def submit_avoid(eids, avoid, why="low risk", notes="The instruction ruled out e:s8:05."):
+    return message(("submit_fix_plan", {"cut_eids": eids, "chosen": "custom", "reasons": [{"eid": e, "why": why} for e in eids], "notes": notes,
+                                         "avoid": [{"eid": e, "quote": q} for e, q in avoid]}))
+
+
+def with_instruction(state, text):
+    state["instructions"] = text
+    return state
+
+
+def avoid_script(avoid_eids, simulate, submit_msg):
+    """The LLM maps the instruction to an edge, asks for the constrained candidates, simulates them, submits."""
+    return [message(("compute_min_cut", {"avoid_eids": avoid_eids}), *[("simulate_cut", {"eids": e}) for e in simulate]), submit_msg]
+
+
+def default_fix_of(state, token):
+    from core import fast_brains
+    return fast_brains.plan(state, lock_token=token)
+
+
+def test_an_honoured_instruction_gives_a_different_cut_that_is_still_proven(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, *avoid_script(["e:s8:05"], [["e:s8:06"], ["e:s8:07"]], submit_avoid(["e:s8:06"], [("e:s8:05", QUOTE)])))
+        events = []
+        plan, degraded = run_plan(with_instruction(state, LEGACY), token, emit=lambda t, m, d, **kw: events.append((t, m, d)))
+        used = sims_used(state)
+    assert not degraded and plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:06"] and set(plan) == FAST_KEYS
+    assert plan["simulation"]["blocks_attack"] and plan["simulation"]["needs_ok"] and plan["simulation"]["collateral"]["count"] == 0  # verified by simulate_cut
+    assert plan["avoid"] == [{"eid": "e:s8:05", "quote": QUOTE}] and plan["instruction"] == {"honoured": True, "note": "avoided e:s8:05"}
+    assert plan["default_fix"]["cut_eids"] == ["e:s8:05"] and plan["default_fix"]["collateral"] == {"count": 0, "weighted": 0}  # what fast mode picks
+    by_cut = {tuple(a["cut_eids"]): a for a in plan["alternatives"]}
+    assert by_cut[("e:s8:05",)]["touches_avoided"] == ["e:s8:05"] and by_cut[("e:s8:07",)]["touches_avoided"] == []  # the default is ruled out by the instruction
+    assert by_cut[("e:s8:07",)]["collateral"]["count"] == 12 and plan["chosen"] == "source_side"  # e:s8:06 is the constrained source_side candidate
+    first_user, first_system = gw.calls[0]["messages"][1]["content"], gw.calls[0]["messages"][0]["content"]
+    assert used <= 6 and "Operator instructions" in first_user and "Max's team" in first_user
+    assert "OPERATOR INSTRUCTIONS" in first_system  # the instruction block is in the system prompt
+    assert [m for t, m, d in events if "rejected" in m] == []
+
+
+def test_a_normal_run_has_no_instruction_block_so_its_cache_keys_do_not_change(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, submit(["e:s8:05"]))
+        run_plan(state, token)
+    assert "OPERATOR INSTRUCTIONS" not in gw.calls[0]["messages"][0]["content"] and "Operator instructions" not in gw.calls[0]["messages"][1]["content"]
+
+
+def test_a_cut_that_contains_an_avoided_edge_is_rejected_and_the_retry_gets_the_problem(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, submit_avoid(["e:s8:05"], [("e:s8:05", QUOTE)]),  # avoids e:s8:05 and cuts it anyway
+                     submit_avoid(["e:s8:06"], [("e:s8:05", QUOTE)]))
+        events = []
+        plan, _ = run_plan(with_instruction(state, LEGACY), token, emit=lambda t, m, d, **kw: events.append((t, m, d)))
+    assert plan["source"] == "planner" and plan["cut_eids"] == ["e:s8:06"] and plan["instruction"]["honoured"] is True
+    retry_task = gw.calls[1]["messages"][1]["content"]
+    assert len(gw.calls) == 2 and "Your previous answer was rejected: the cut contains the avoided edge(s) ['e:s8:05']" in retry_task
+    assert len([m for t, m, d in events if "planner_choice_rejected" in m]) == 1
+
+
+@pytest.mark.parametrize("avoid,why", [([("e:s8:05", "never touch the audit role")], "is not a substring of the operator instruction"),
+                                       ([("e:nope", QUOTE)], "avoid eid e:nope does not exist")])
+def test_an_invented_quote_or_eid_is_rejected_twice_then_the_code_candidate_with_a_note(db, monkeypatch, avoid, why):
+    with prepared(*S8) as (state, token):
+        gw = Gateway(monkeypatch, submit_avoid(["e:s8:06"], avoid), submit_avoid(["e:s8:06"], avoid))
+        plan, degraded = run_plan(with_instruction(state, LEGACY), token)
+    assert len(gw.calls) == 2 and not degraded and plan["source"] == "code" and plan["cut_eids"] == ["e:s8:05"]  # the code candidate
+    assert plan["instruction"]["honoured"] is False and why in plan["instruction"]["note"]
+    assert plan["notes"].startswith("Instruction could not be honoured: ")  # never silently ignored
+    assert plan["avoid"] == [] and set(plan) == FAST_KEYS
+
+
+def test_a_fix_with_an_avoided_edge_that_is_not_verified_is_never_accepted(db, monkeypatch):
+    with prepared(*S8) as (state, token):  # the avoid list is fine, but the cut blocks nothing: the simulation says no
+        Gateway(monkeypatch, submit_avoid(["e:s8:09"], [("e:s8:05", QUOTE)]), submit_avoid(["e:s8:09"], [("e:s8:05", QUOTE)]))
+        plan, _ = run_plan(with_instruction(state, LEGACY), token)
+    assert plan["source"] == "code" and plan["instruction"]["honoured"] is False and "blocks_attack=False" in plan["instruction"]["note"]
+
+
+def test_an_instruction_that_rules_out_no_edge_is_reported_as_such(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        Gateway(monkeypatch, message(sim(state, ["e:s8:05"]), sim(state, ["e:s8:07"])), submit_avoid(["e:s8:05"], [], notes="Nothing to avoid."))
+        plan, _ = run_plan(with_instruction(state, "Please be careful."), token)
+    assert plan["source"] == "planner" and plan["avoid"] == [] and plan["default_fix"] is None
+    assert plan["instruction"] == {"honoured": True, "note": "the instruction rules out no edge"}
+
+
+def test_s2_leave_the_build_server_alone_gives_a_cut_without_the_secret_edge(db, monkeypatch):
+    text = "Don't touch the build server, CI depends on it."
+    with prepared("s2", "user:ravi") as (state, token):
+        Gateway(monkeypatch, *avoid_script(["e:s2:10"], [["e:s2:08", "e:s2:11"]], submit_avoid(["e:s2:08", "e:s2:11"], [("e:s2:10", "Don't touch the build server")])))
+        plan, _ = run_plan(with_instruction(state, text), token)
+        default = default_fix_of(state, token)
+    assert plan["source"] == "planner" and "e:s2:10" not in plan["cut_eids"] and "e:s2:11" in plan["cut_eids"]
+    assert plan["simulation"]["blocks_attack"] and plan["simulation"]["needs_ok"] and plan["avoid"][0]["eid"] == "e:s2:10"
+    assert "e:s2:10" in default["cut_eids"]  # the default fix is the one that touches the build server
+
+
+def test_without_a_safe_cut_the_instruction_is_not_applied_and_says_so(db, monkeypatch):
+    key = json.load(open("data/answer_keys/s5.json"))
+    gw = Gateway(monkeypatch)
+    with prepared("s5", key["src"]) as (state, token):
+        plan, _ = run_plan(with_instruction(state, "Leave the shared policy alone."), token)
+    assert gw.calls == [] and plan["instruction"] == {"honoured": False, "note": "no safe cut exists even without the instruction"}
+    assert plan["notes"].startswith("Instruction could not be honoured: no safe cut exists")
+
+
+def test_when_the_llm_is_unavailable_the_instruction_is_not_honoured_and_the_step_is_named(db, monkeypatch):
+    with prepared(*S8) as (state, token):
+        Gateway(monkeypatch, LLMUnavailable("429 RateLimitError"))
+        plan, degraded = run_plan(with_instruction(state, LEGACY), token)
+        steps = state["degraded_steps"]
+    assert degraded is True and plan["instruction"] == {"honoured": False, "note": "the LLM was unavailable"} and steps == ["planner: rate limit"]
+
+
+def test_a_repeated_constrained_call_is_answered_from_the_first_one(db, monkeypatch):
+    with prepared(*S8) as (state, token):  # the retry runs the agent again: its compute_min_cut(avoid) must not cost a 2nd guarded copy
+        avoid = [("e:s8:05", "not in the instruction")]
+        Gateway(monkeypatch, *avoid_script(["e:s8:05"], [["e:s8:06"]], submit_avoid(["e:s8:06"], avoid)),
+                *avoid_script(["e:s8:05"], [["e:s8:06"]], submit_avoid(["e:s8:06"], avoid)))
+        run_plan(with_instruction(state, LEGACY), token)
+        used = sims_used(state)
+    # ONE constrained copy + ONE simulate_cut for both attempts (the repeats were answered from what was already seen: 6 without that),
+    # plus the 2 candidates the code fallback simulates once both answers were rejected
+    assert used == 4

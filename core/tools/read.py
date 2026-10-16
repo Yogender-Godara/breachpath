@@ -130,6 +130,12 @@ def check_business_access(graph):
 
 
 @tool
-def compute_min_cut(graph, src):
+def compute_min_cut(graph, src, avoid_eids=None, incident_id=None, lock_token=None):
+    """avoid_eids (an operator instruction): none of these edges may be cut. That runs on a guarded throw-away copy, so it needs incident_id and lock_token."""
     _node(graph, src)
-    return mincut.compute_min_cut(graph, src)  # when safe is false the pipeline calls split_suggestion (core/tools/split.py)
+    if not avoid_eids:
+        return mincut.compute_min_cut(graph, src)  # when safe is false the pipeline calls split_suggestion (core/tools/split.py)
+    from core.tools import write  # imported here: write.py is the guarded side
+    if not (incident_id and lock_token):
+        raise BadInput("avoid_eids needs incident_id and lock_token (it runs on a guarded copy of the sandbox)")
+    return write.min_cut_avoiding(graph, src, avoid_eids, incident_id=incident_id, lock_token=lock_token)

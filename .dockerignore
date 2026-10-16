@@ -6,4 +6,6 @@ __pycache__
 *.pyc
 .pytest_cache
 data/generated
-eval/results
+eval/results/*
+!eval/results/latest.json
+!eval/results/latest.md

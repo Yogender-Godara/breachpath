@@ -329,3 +329,17 @@ def test_live_a_bad_groq_key_restarts_the_run_on_openrouter(s2, monkeypatch):
     assert result.provider == "openrouter"
     assert any("provider groq unavailable" in e["msg"] and "restarting on openrouter" in e["msg"] for e in events)
     assert "bad-key" not in json.dumps(events)
+
+
+def test_short_reason_names_the_cause_and_note_degraded_records_the_step_once():
+    from agents.base import note_degraded, short_reason
+    assert short_reason("groq: provider still failing after 1 retry: RateLimitError") == "rate limit"
+    assert short_reason("429 Too Many Requests") == "rate limit" and short_reason("no LLM provider configured (LLM_PROVIDERS=groq)") == "no provider configured"
+    assert short_reason("openai.APITimeoutError: Request timeout") == "provider timeout" and short_reason("403 permission_denied") == "provider refused the call"
+    assert short_reason("groq: provider still failing after 1 retry: BadRequestError") == "model output unusable"
+    assert short_reason("x" * 200) == "x" * 80
+    state = {}
+    note_degraded(state, "reporter", "RateLimitError")
+    note_degraded(state, "reporter", "429")  # the same step with the same label is listed once
+    note_degraded(state, "planner", "timeout")
+    assert state["degraded_steps"] == ["reporter: rate limit", "planner: provider timeout"]

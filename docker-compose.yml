@@ -1,4 +1,4 @@
-# BreachPath: deployed stack. falkordb, api and worker publish NO port (internal Docker network only); only `ui` will (added in P7/P9).
+# BreachPath: deployed stack. falkordb, api and worker publish NO port (internal Docker network only); only `ui` does (port 8501).
 # Local-only ports (api on 127.0.0.1:8000, FalkorDB) and the toolbox live in docker-compose.dev.yml.
 services:
   falkordb:
@@ -42,6 +42,18 @@ services:
     depends_on:
       falkordb:
         condition: service_healthy
+    restart: unless-stopped
+
+  ui:
+    build: .
+    image: breachpath:local
+    command: streamlit run ui/app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true --browser.gatherUsageStats false
+    ports:
+      - "8501:8501"   # the ONLY published port of the stack
+    environment:
+      API_URL: http://api:8000   # the UI only talks to the API (no database access)
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:

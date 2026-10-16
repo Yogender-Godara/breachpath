@@ -125,6 +125,15 @@ def test_scenarios_list_has_the_eight(api):
     assert all(sorted(r) == ["description", "id", "src", "title"] for r in rows)
 
 
+def test_scenario_users_lists_only_users_and_404_when_not_loaded(api):
+    api.post("/v1/scenarios/s8/load")
+    users = api.get("/v1/scenarios/s8/users").json()["users"]
+    assert "user:max" in users and users == sorted(users) and all(u.startswith("user:") for u in users)  # no role, group or policy
+    assert not any(u.startswith(("role:", "group:", "policy:")) for u in users) and len(users) > 20
+    err(api.get("/v1/scenarios/s99/users"), 404, "NOT_FOUND")
+    err(api.get("/v1/scenarios/..%2Fx/users"), 404, "NOT_FOUND")
+
+
 def test_load_s2_returns_the_counts(api):
     assert api.post("/v1/scenarios/s2/load").json() == {"graph": "t:s2:baseline", "nodes": 142, "edges": 179, "needs": 23}
 
@@ -153,6 +162,8 @@ def test_analyze_s2_done_and_cleans_up(api):
     assert set(out["timings_ms"]) == {"investigator", "executor", "planner", "verifier", "reporter", "total"}
     assert sandboxes_of(out["incident_id"]) == []
     assert graph_client.get_db().connection.scard("active:s2") == 0
+    graph = out["graph"]  # the UI cannot ask /graph for a fast run (its state is never stored), so /analyze carries it
+    assert {e["eid"] for e in graph["edges"] if e["cut"]} == {"e:s2:05", "e:s2:10"} and any(n["is_src"] for n in graph["nodes"])
 
 
 def test_analyze_s5_needs_human_and_the_split_sandbox_is_cleaned_up(api):
@@ -195,6 +206,25 @@ def test_incident_created_stays_queued_and_is_in_the_jobs_stream(api):
     state = api.get(f"/v1/incidents/{incident_id}").json()
     assert state["status"] == "QUEUED" and state["mode"] == "agent" and state["src"] == "user:ravi"
     err(api.get("/v1/incidents/nope"), 404, "NOT_FOUND")
+
+
+def test_an_operator_instruction_is_stored_in_the_state_and_analyze_ignores_it(api):
+    text = "  Don't touch the build server, CI depends on it.  "
+    r = api.post("/v1/incidents", json={"tenant": "s2", "src": "user:ravi", "mode": "agent", "instructions": text}, headers={"X-Demo-Token": TOKEN})
+    assert r.status_code == 202
+    api.made.append(r.json()["incident_id"])
+    state = api.get(f"/v1/incidents/{r.json()['incident_id']}").json()
+    assert state["instructions"] == "Don't touch the build server, CI depends on it."  # trimmed
+    plain = post_incident(api)  # no instruction: an empty string
+    assert api.get(f"/v1/incidents/{plain.json()['incident_id']}").json()["instructions"] == ""
+    err(api.post("/v1/incidents", json={"tenant": "s2", "src": "user:ravi", "mode": "agent", "instructions": "x" * 501}, headers={"X-Demo-Token": TOKEN}),
+        400, "BAD_INPUT")  # too long: refused before anything is queued
+    from api.routes.incidents import IncidentBody
+    assert IncidentBody(tenant="s2", src="user:ravi", mode="agent", instructions="x" * 500).instructions == "x" * 500  # 500 is allowed, 501 is not
+    done = api.post("/v1/analyze", json={"tenant": "s2", "src": "user:ravi", "instructions": "Do not touch e:s2:05"}).json()  # fast mode: ignored
+    api.made.append(done["incident_id"])
+    assert done["plan"]["cut_eids"] == ["e:s2:05", "e:s2:10"] and done["plan"]["avoid"] == [] and done["plan"]["instruction"] is None
+    assert done["attempt"] == 1 and done["degraded"] is False and done["degraded_steps"] == []
 
 
 def test_incident_unknown_src(api):
@@ -273,6 +303,13 @@ def test_graph_marks_the_cut_the_path_and_the_protected_edges(api):
     assert by_eid["e:s2:05"]["on_path"] and by_eid["e:s2:01"]["on_path"] and by_eid["e:s2:01"]["protected"]
     assert not by_eid["e:s2:05"]["protected"]
     assert {e for e, v in by_eid.items() if v["protected"]} <= set(state["action"]["protected_eids"])
+    # the company-wide background is hidden: a protected edge is drawn only if it touches a node of an attack path (or is next to a cut edge)
+    path_nodes = {n for p in state["findings"]["paths"] for n in p["node_ids"]}
+    cut_nodes = {n for e in ("e:s2:05", "e:s2:10") for n in (by_eid[e]["src"], by_eid[e]["dst"])}
+    drawn_protected = {e for e, v in by_eid.items() if v["protected"]}
+    assert all({by_eid[e]["src"], by_eid[e]["dst"]} & (path_nodes | cut_nodes) for e in drawn_protected)
+    assert view["hidden_protected"] == len(state["action"]["protected_eids"]) - len(drawn_protected) > 30  # S2: about 40 background edges hidden
+    assert len(view["edges"]) < 25 and view["more"] == 0
     node_ids = {n["id"] for n in view["nodes"]}
     assert all(e["src"] in node_ids and e["dst"] in node_ids for e in view["edges"])
     assert len(view["nodes"]) + len(view["edges"]) <= graph_view.MAX_ELEMENTS

@@ -103,8 +103,10 @@ Steps:
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["cut_eids", "chosen", "reasons", "notes"],
+  "required": ["cut_eids", "chosen", "reasons", "notes", "avoid"],
   "properties": {
+    "avoid": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["eid", "quote"],
+              "properties": {"eid": {"type": "string"}, "quote": {"type": "string"}}}},   // P7.7: edges ruled out by the operator instruction, with its exact words ([] if none)
     "cut_eids": {"type": "array", "items": {"type": "string"}},
     "chosen":   {"type": "string", "enum": ["source_side", "sink_side", "custom"]},
     "reasons": {
@@ -128,12 +130,25 @@ Steps:
 
 ---
 
+**Operator instructions (P7.7):** when the task contains `Operator instructions`, the system prompt also carries `agents/prompts/planner_instructions.md`: "If there are operator instructions, map them to edges to avoid, call compute_min_cut with avoid_eids, simulate the candidates, choose by collateral, then size, then staleness, and explain how the instruction changed the fix." `avoid` is optional for Pydantic (default `[]`, so older cached answers stay valid) but required in the JSON schema.
+
+---
+
 ## 4. Reporter
 
 **System (after the preamble):**
 ```text
 Role: REPORTER. Input: the full incident state JSON. No tools.
 Write a Markdown incident report for a security manager. Use ONLY facts in the JSON.
+attack_max_flow_before_fix is measured BEFORE any change; for a proven suggestion report its own proof (max flow after the split).
+Rules:
+- If `instructions` is present, the Fix section quotes the operator instruction, names each avoided edge in plan.avoid with its quote, and says in ONE sentence what changed versus plan.default_fix (or that the instruction did not change the fix), or that it could not be honoured (plan.instruction.note). Never ignore it.
+- If plan.alternatives is not empty, the Fix section says in ONE sentence why the chosen cut beats each alternative, using only the numbers of that alternative (collateral, size, stale days).
+- Write "not assessed" for any section or item with no data in the JSON (e.g. NEEDS_HUMAN has no verdict and no collateral analysis).
+- Use only facts in the JSON. No inferences (e.g. "kept by the rest of the org", "minimal change") unless a field says so.
+- Removed edges were changed in a SANDBOX only. Host actions (delete file, rotate secret) are recommendations: write them as steps to do, never as done.
+- Never mention JSON field names or internal values (status=, safe=true, attack_max_flow...).
+- Refer to identities by id only; never use pronouns (he/she/him/her/his/hers) for them.
 
 Sections (in this order, keep each short):
 ## Summary            – one paragraph: who was compromised, what was at risk, what was done, result.
@@ -149,7 +164,9 @@ If status is NEEDS_HUMAN, say clearly that no safe automatic fix was found and w
 If degraded=true, add one line: "Generated in degraded mode (LLM step unavailable)."
 ```
 
-**Output:** Markdown text (no submit tool). **Fallback** if the LLM fails: a Jinja-style template fills the same sections from the state, so the report is never missing.
+**Input actually sent (P7.1):** not the full state but a trimmed JSON slice (LLD §6.2), without the incident id. **Fact guard:** (with alternatives, the Fix section names each one's eids and its collateral number;) headings, eids and node ids must exist in the slice, "verified" only when `proven` (and always when proven), NEEDS_HUMAN must say there is no safe automatic fix; one retry with the problems, then the template.
+
+**Output:** Markdown text (no submit tool). **Fallback** if the LLM fails or the guard rejects twice: a Jinja-style template fills the same sections from the state, so the report is never missing.
 
 ---
 
@@ -173,6 +190,8 @@ COMPROMISED: "<src>"
 3. Give the SMALLEST set of eids to remove so no crown jewel is reachable,
    without breaking any business need.
 ```
+
+**Compact form actually sent (P8.1):** the full JSON above is about 8.5k tokens and Groq's free tier refuses a request over 8000 tokens (413). `eval/baseline_json_llm.py` sends the same information as `GRAPH (edges are rows [eid, type, src, dst]): {"crown_jewels": [...], "edges": [...]}` and `BUSINESS_NEEDS (rows [principal, resource]): [...]`: a node's label is its id prefix and a node without an edge cannot matter. Only valid needs are sent.
 
 **Output:** JSON (use `response_format: {"type": "json_object"}` where the provider supports it, plus the instruction "Reply with JSON only"), validated by Pydantic against
 `{reachable_jewels: [string], paths: [[string]], cut_eids: [string]}`. Invalid JSON counts as a failed answer (scored 0), not a retry, so the comparison stays fair.

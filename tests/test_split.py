@@ -79,6 +79,8 @@ def test_s5_has_no_safe_cut_and_gets_a_proven_policy_split(redis):
         "split_node", "policy:s5-shared-ops", "policy:s5-shared-ops-biz", True)
     assert s["then_remove"] == [] and s["moved_edges"] == ["e:s5:03"] and s["copied_edges"] == ["e:s5:04-biz"]
     assert "user:zoe keeps policy:s5-shared-ops-biz (only CAN_SSH -> server:s5-deploy)" in s["text"]
+    proof = s["proof"]  # what the split sandbox measured
+    assert (proof["max_flow_after_split"], proof["bfs_reached_jewels"], proof["needs_ok"]) == (0, [], True) and proof["needs_checked"] > 0
 
     # the -split sandbox is kept; the main sandbox and the baseline are unchanged
     assert sandbox_name("s5", INC, "-split") in client.get_db().list_graphs()
