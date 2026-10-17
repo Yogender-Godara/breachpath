@@ -43,6 +43,8 @@ INTERNAL = re.compile(r"\b(?:(?:plan|suggestion|verdict|findings|action|instruct
                       r"|attack_max_flow(?:_before_fix)?|cut_actions|cut_eids|applied_eids|host_action|default_fix|degraded_steps|bfs_reached_jewels"
                       r"|needs_ok|blocks_attack|stale_days_total|max_flow_after_split|reachable_jewels|touches_avoided)\b")
 NOT_ASSESSED = "Not assessed: no collateral analysis was run for this incident."
+ALT_PROBLEM = "the Fix section must say in one sentence why the chosen cut beats the alternative"
+INSTRUCTION_PROBLEM = "an operator instruction was given: the Fix section must mention the instruction"
 COLLATERAL_PROBLEM = 'there is no collateral data: in Business impact do not say "nobody", "no one" or "none"; write "not assessed"'
 
 
@@ -113,6 +115,22 @@ def _heading_name(text):
     return re.split(r"\s+[–—-]\s+|:", text, maxsplit=1)[0].strip()
 
 
+def _alternatives_missing(fix, slice_):
+    """The alternatives the Fix section does not explain yet (empty Fix section: none, a missing section is another problem)."""
+    out = []
+    for alt in (slice_.get("plan") or {}).get("alternatives", []):
+        # the eids alone are not enough (an alternative's edge can also be on the witness path): its collateral number must be there too
+        missing = [e for e in alt["cut_eids"] if e not in slice_["plan"]["cut_eids"] and e not in fix]
+        no_number = not re.search(rf"(?<![\w.]){alt['collateral']['count']}(?!\w|\.\d)", fix)
+        if fix.strip() and (missing or no_number):
+            out.append(alt)
+    return out
+
+
+def _avoided_missing(fix, slice_):
+    return [a["eid"] for a in (slice_["plan"] or {}).get("avoid", []) if a["eid"] not in fix]
+
+
 def check(markdown, slice_):
     """Pure. -> a list of problems; empty means the report may be used."""
     problems = []
@@ -154,18 +172,14 @@ def check(markdown, slice_):
     if no_collateral_data and impact.strip() and (NO_ONE.search(impact) or "not assessed" not in impact.lower()):
         problems.append(COLLATERAL_PROBLEM)
     fix = (FIX.search(markdown) or [None, ""])[1]
-    for alt in (slice_.get("plan") or {}).get("alternatives", []):
-        # the eids alone are not enough (an alternative's edge can also be on the witness path): its collateral number must be there too
-        missing = [e for e in alt["cut_eids"] if e not in slice_["plan"]["cut_eids"] and e not in fix]
-        no_number = not re.search(rf"(?<![\w.]){alt['collateral']['count']}(?!\w|\.\d)", fix)
-        if fix.strip() and (missing or no_number):
-            problems.append(f"the Fix section must say in one sentence why the chosen cut beats the alternative {', '.join(alt['cut_eids'])} "
-                            f"(collateral {alt['collateral']['count']}, weighted {alt['collateral']['weighted']}, size {alt['size']}, stale days {alt['stale_days_total']}): "
-                            f"name its eids and give its numbers")
+    for alt in _alternatives_missing(fix, slice_):
+        problems.append(f"{ALT_PROBLEM} {', '.join(alt['cut_eids'])} "
+                        f"(collateral {alt['collateral']['count']}, weighted {alt['collateral']['weighted']}, size {alt['size']}, stale days {alt['stale_days_total']}): "
+                        f"name its eids and give its numbers")
     if slice_.get("instructions") and fix.strip():  # the operator's instruction must be visible where the fix is explained
-        gone = [a["eid"] for a in (slice_["plan"] or {}).get("avoid", []) if a["eid"] not in fix]
+        gone = _avoided_missing(fix, slice_)
         if "instruction" not in fix.lower() or gone:
-            problems.append("an operator instruction was given: the Fix section must mention the instruction"
+            problems.append(INSTRUCTION_PROBLEM
                             + (f" and name the avoided edge(s) {', '.join(gone)}" if gone else "")
                             + ", say what changed versus the default fix (or that nothing changed), or that it could not be honoured")
     if pronouns := dict.fromkeys(w.lower() for w in PRONOUN.findall(markdown)):
@@ -196,6 +210,57 @@ def _repair_impact(text):
     return text if m is None else text[:m.start(1)] + "\n" + NOT_ASSESSED + "\n\n" + text[m.end(1):]
 
 
+def _alternative_sentence(alt, slice_):
+    """One plain sentence for an alternative the Fix section left out, from its numbers (and the chosen cut's, when simulated)."""
+    blocks = "blocks the attack" if alt["blocks_attack"] and alt["needs_ok"] else "does not block the attack safely"
+    sim = slice_["plan"].get("simulation")
+    versus = f" against {sim['collateral']['count']} for the chosen cut" if sim else ""
+    return (f"The alternative {', '.join(alt['cut_eids'])} was not chosen: it {blocks}, would make {alt['collateral']['count']} (user, resource) pair(s) "
+            f"lose access (weighted {alt['collateral']['weighted']}){versus}, and has size {alt['size']} and {alt['stale_days_total']} stale days in total.")
+
+
+def _instruction_sentence(slice_):
+    """One plain sentence about the operator instruction: what it ruled out and what changed versus the default fix, or that it could not be honoured."""
+    plan = slice_["plan"] or {}
+    info = plan.get("instruction") or {}
+    if not info.get("honoured"):
+        return f"The operator instruction could not be honoured: {info.get('note', 'no plan was made')}."
+    avoid = plan.get("avoid") or []
+    if not avoid:
+        return "The operator instruction rules out no edge and did not change the fix."
+    out = "The operator instruction was applied and rules out " + ", ".join(f'{a["eid"]} ("{a["quote"]}")' for a in avoid)
+    default = plan.get("default_fix")
+    if not default:
+        return out + "; it did not change the fix."
+    c = default["collateral"]
+    return (out + f"; without it the fix would have been {', '.join(default['cut_eids'])} (collateral {c['count']}, weighted {c['weighted']}) "
+            f"and with it the fix is {', '.join(plan['cut_eids'])}.")
+
+
+def _append_to_fix(text, sentences):
+    m = FIX.search(text)
+    return text if m is None else text[:m.start(1)] + m.group(1).rstrip() + "\n\n" + "\n".join(sentences) + "\n\n" + text[m.end(1):]
+
+
+def _repair(text, problems, slice_):
+    """Pure. After the retry failed: write in code the sentences the report lacks, when ONLY these problems are left: a collateral claim without
+    data (Business impact -> NOT_ASSESSED), the missing "why the chosen cut beats the alternative" sentence(s), the missing operator-instruction
+    sentence. Anything else (invented id, pronoun, "verified", status, headings) -> no repair. -> (new text, [repair names]); the caller checks again."""
+    def repairable(p):
+        return p == COLLATERAL_PROBLEM or p.startswith(ALT_PROBLEM) or p.startswith(INSTRUCTION_PROBLEM)
+    if not problems or not all(repairable(p) for p in problems):
+        return text, []
+    repairs = []
+    if COLLATERAL_PROBLEM in problems:
+        text, repairs = _repair_impact(text), repairs + ["business impact"]
+    if any(p.startswith(INSTRUCTION_PROBLEM) for p in problems):
+        text, repairs = _append_to_fix(text, [_instruction_sentence(slice_)]), repairs + ["instruction sentence"]
+    if any(p.startswith(ALT_PROBLEM) for p in problems):
+        gaps = _alternatives_missing((FIX.search(text) or [None, ""])[1], slice_)
+        text, repairs = _append_to_fix(text, [_alternative_sentence(a, slice_) for a in gaps]), repairs + ["alternative sentence"]
+    return text, repairs
+
+
 def _unfence(text):
     """Some models wrap the whole answer in a ```markdown fence."""
     return re.sub(r"\A```(?:markdown|md)?[ \t]*\n(.*?)\n?```\Z", r"\1", text.strip(), flags=re.DOTALL)
@@ -203,14 +268,14 @@ def _unfence(text):
 
 def _ask(provider, slice_, emit, tally, state):
     """One call, and ONE retry when the guard finds problems (they are sent back as a user message).
-    -> (markdown, repaired) or (None, False). repaired: after the retry the ONLY problem left was a collateral claim without data, so the
-    code replaced the Business impact body by NOT_ASSESSED. LLMUnavailable goes up: the caller tries the next provider.
+    -> (markdown, repairs) or (None, []). repairs: after the retry the code wrote the missing sentences itself (`_repair`) and the guard
+    passes now: the names of the repairs. LLMUnavailable goes up: the caller tries the next provider.
     Every call counts toward the incident's LLM budget; when it is used up the template decides (tally["budget"])."""
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _user_message(slice_)}]
     for attempt in (1, 2):
         if budget_used_up(state):
             tally["budget"] = True
-            return None, False
+            return None, []
         count_llm_call(state)
         result = llm_gateway.chat("reporter", provider, messages, temperature=TEMPERATURE)
         tally["llm_calls"] += 1
@@ -221,23 +286,26 @@ def _ask(provider, slice_, emit, tally, state):
               {"provider": result.provider, "model": result.model, "attempt": attempt, "cached": result.cached, "problems": problems},
               latency_ms=result.latency_ms, tokens_in=result.tokens_in, tokens_out=result.tokens_out)
         if not problems:
-            return text, False
-        tally["problems"] = problems
+            return text, []
+        tally["problems"] = tally["blocking"] = problems
         messages = messages + [{"role": "assistant", "content": text}, {"role": "user", "content":
                                "Your report has problems:\n" + "\n".join(f"- {p}" for p in problems) + "\nWrite the whole report again and fix them."}]
-    if set(problems) == {COLLATERAL_PROBLEM} and not check(repaired := _repair_impact(text), slice_):
-        return repaired, True  # keep the rest of the LLM report
-    return None, False
+    repaired, repairs = _repair(text, problems, slice_)
+    if repairs:
+        tally["blocking"] = check(repaired, slice_)
+        if not tally["blocking"]:
+            return repaired, repairs  # keep the rest of the LLM report
+    return None, []
 
 
 def write(state, emit=None):
     """-> (markdown, degraded). degraded is True when the template report was used instead of the LLM's."""
     slice_ = _slice(state, _cut_kinds(state))
-    tally = {"llm_calls": 0, "provider": None, "model": None, "problems": []}
-    markdown, repaired, reasons = None, False, []
+    tally = {"llm_calls": 0, "provider": None, "model": None, "problems": [], "blocking": []}
+    markdown, repairs, reasons = None, [], []
     for provider in llm_gateway.providers_for("reporter"):
         try:
-            markdown, repaired = _ask(provider, slice_, emit, tally, state)
+            markdown, repairs = _ask(provider, slice_, emit, tally, state)
         except LLMUnavailable as e:
             _emit(emit, "step", f"Reporter provider {provider} unavailable: {e}", {"provider": provider, "reason": str(e)})
             reasons.append(str(e))
@@ -247,13 +315,14 @@ def write(state, emit=None):
     if degraded:
         note_degraded(state, "reporter", BUDGET_REASON if tally.get("budget") else
                       "no LLM provider configured" if not tally["llm_calls"] and not reasons else "; ".join(reasons) if not tally["llm_calls"]
-                      else "fact check failed twice")
+                      else f"fact check failed twice: {(tally['blocking'] or ['no detail'])[0][:80]}")
         markdown = fast_brains.report({**state, "degraded": True})["markdown"]  # the same sections; adds the degraded line (with the steps)
     elif state["degraded"] and fast_brains.degraded_line(state.get("degraded_steps")) not in markdown:
         markdown = markdown.rstrip() + "\n\n" + fast_brains.degraded_line(state.get("degraded_steps"))
     markdown = markdown.rstrip() + "\n"
-    source = "template" if degraded else "llm+repaired" if repaired else "llm"
-    _emit(emit, "report", f"report from the {'template (fallback)' if degraded else 'LLM' + (' (Business impact repaired in code)' if repaired else '')}: {len(markdown)} chars",
-          {"source": source, "provider": tally["provider"], "model": tally["model"],
+    source = "template" if degraded else "llm+repaired" if repairs else "llm"
+    how = "template (fallback)" if degraded else "LLM" + (" (repaired in code: " + ", ".join(repairs) + ")" if repairs else "")
+    _emit(emit, "report", f"report from the {how}: {len(markdown)} chars",
+          {"source": source, "provider": tally["provider"], "model": tally["model"], "repairs": repairs,
            "llm_calls": tally["llm_calls"], "retry_problems": tally["problems"], "chars": len(markdown)})
     return markdown, degraded

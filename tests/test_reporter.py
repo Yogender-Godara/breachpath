@@ -97,8 +97,9 @@ def test_a_missing_heading_twice_falls_back_to_the_template_and_degraded(s2, mon
     markdown, degraded = reporter.write(s2)
     assert degraded is True and len(gateway.calls) == 2
     assert markdown == fast_brains.report({**s2, "degraded": True})["markdown"]
-    assert s2["degraded_steps"] == ["reporter: fact check failed twice"]  # WHICH step fell back
-    assert markdown.endswith("Generated in degraded mode (reporter: fact check failed twice).\n") and [h for h in HEADINGS if f"## {h}" in markdown] == HEADINGS
+    why = "reporter: fact check failed twice: " + reporter.check(bad, slice_of(s2))[0][:80]  # WHICH step fell back, and WHY (the first problem, cut to 80 chars)
+    assert s2["degraded_steps"] == [why] and len(why) <= len("reporter: fact check failed twice: ") + 80
+    assert markdown.endswith(f"Generated in degraded mode ({why}).\n") and [h for h in HEADINGS if f"## {h}" in markdown] == HEADINGS
 
 
 def test_still_bad_after_the_retry_does_not_try_the_next_provider(s2, monkeypatch):
@@ -561,3 +562,112 @@ def test_a_number_at_the_end_of_a_sentence_counts_for_the_alternatives_collatera
         assert not any("alternative e:s8:07" in p for p in reporter.check(text, slice_of(s8))), tail
     text = good.replace(fix, "\n- e:s8:05 is cheaper than e:s8:07, which costs 12.5 units.\n\n")  # 12.5 is not 12
     assert any("alternative e:s8:07" in p for p in reporter.check(text, slice_of(s8)))
+
+
+# --- the repairs after a failed retry (P9.6): the code writes the missing sentence, anything else is the template ---
+
+def with_fix(text, body):
+    """The report with the Fix section body replaced."""
+    fix = text.split("## Fix")[1].split("## Proof")[0]
+    return text.replace(fix, "\n" + body + "\n\n")
+
+
+def write_twice(state, monkeypatch, bad):
+    """reporter.write with a gateway that answers `bad` twice -> (markdown, degraded, number of calls, events)."""
+    events = []
+    gateway = Gateway(monkeypatch, say(bad), say(bad))
+    markdown, degraded = reporter.write(state, emit=lambda *a, **kw: events.append(a))
+    return markdown, degraded, len(gateway.calls), events
+
+
+def test_a_missing_alternative_sentence_is_written_in_code_after_the_retry(states, monkeypatch):
+    s8 = copy.deepcopy(states["s8"])
+    good = template(s8)
+    bad = with_fix(good, "- Edit the role's trust policy: e:s8:05 has zero collateral.")
+    assert any(p.startswith(reporter.ALT_PROBLEM) for p in reporter.check(bad, slice_of(s8)))
+    markdown, degraded, calls, events = write_twice(s8, monkeypatch, bad)
+    assert degraded is False and calls == 2 and s8["degraded_steps"] == []
+    fix = markdown.split("## Fix")[1].split("## Proof")[0]
+    assert "The alternative e:s8:07 was not chosen: it blocks the attack, would make 12 (user, resource) pair(s) lose access (weighted 12) against 0 for the chosen cut" in fix
+    assert "and has size 1 and 150 stale days in total." in fix and reporter.check(markdown, slice_of(s8)) == []
+    assert markdown.split("## Fix")[0] == good.split("## Fix")[0] and "e:s8:05 has zero collateral" in fix  # the LLM's own words stay
+    assert events[-1][2]["source"] == "llm+repaired" and events[-1][2]["repairs"] == ["alternative sentence"]
+    assert "repaired in code: alternative sentence" in events[-1][1]
+
+
+def test_a_missing_instruction_mention_is_written_in_code_after_the_retry(states, monkeypatch):
+    state = instructed(states)
+    bad = with_fix(template(state), "- Edit the role's trust policy. The rejected e:s8:07 would cost 12.")
+    problems = reporter.check(bad, slice_of(state))
+    assert len(problems) == 1 and problems[0].startswith(reporter.INSTRUCTION_PROBLEM)
+    markdown, degraded, calls, events = write_twice(state, monkeypatch, bad)
+    fix = markdown.split("## Fix")[1].split("## Proof")[0]
+    assert degraded is False and calls == 2 and events[-1][2]["repairs"] == ["instruction sentence"]
+    assert f'The operator instruction was applied and rules out e:s8:05 ("{QUOTE}")' in fix
+    assert "without it the fix would have been e:s8:05 (collateral 0, weighted 0) and with it the fix is e:s8:05." in fix
+    assert reporter.check(markdown, slice_of(state)) == []
+
+
+def test_the_instruction_sentence_covers_no_change_and_not_honoured(states):
+    nothing = instructed(states)
+    nothing["plan"]["default_fix"] = None
+    assert reporter._instruction_sentence(slice_of(nothing)).endswith("; it did not change the fix.")
+    no_edge = instructed(states)
+    no_edge["plan"]["avoid"] = []
+    assert reporter._instruction_sentence(slice_of(no_edge)) == "The operator instruction rules out no edge and did not change the fix."
+    refused = instructed(states, honoured=False)
+    sentence = reporter._instruction_sentence(slice_of(refused))
+    assert sentence.startswith("The operator instruction could not be honoured: the quote 'x'")
+    fixed = with_fix(template(refused), "- Edit the role's trust policy. The rejected e:s8:07 would cost 12. " + sentence)
+    assert reporter.check(fixed, slice_of(refused)) == []
+
+
+def test_both_repairs_together(states, monkeypatch):
+    state = instructed(states)
+    bad = with_fix(template(state), "- Edit the role's trust policy.")
+    problems = reporter.check(bad, slice_of(state))
+    assert len(problems) == 2 and problems[0].startswith(reporter.ALT_PROBLEM) and problems[1].startswith(reporter.INSTRUCTION_PROBLEM)
+    markdown, degraded, calls, events = write_twice(state, monkeypatch, bad)
+    assert degraded is False and calls == 2 and events[-1][2]["source"] == "llm+repaired"
+    assert events[-1][2]["repairs"] == ["instruction sentence", "alternative sentence"]
+    assert reporter.check(markdown, slice_of(state)) == [] and "Edit the role's trust policy." in markdown
+
+
+def test_an_invented_eid_next_to_a_repairable_problem_is_still_the_template(states, monkeypatch):
+    s8 = copy.deepcopy(states["s8"])
+    bad = with_fix(template(s8), "- Edit the role's trust policy: e:s8:99 has zero collateral.")
+    problems = reporter.check(bad, slice_of(s8))
+    assert any(p.startswith(reporter.ALT_PROBLEM) for p in problems) and any("e:s8:99" in p for p in problems)
+    assert reporter._repair(bad, problems, slice_of(s8)) == (bad, [])  # one unrepairable problem poisons the whole report
+    markdown, degraded, calls, events = write_twice(s8, monkeypatch, bad)
+    assert degraded is True and calls == 2 and markdown == fast_brains.report({**s8, "degraded": True})["markdown"] and events[-1][2]["source"] == "template"
+    reason = s8["degraded_steps"][0]
+    assert reason.startswith("reporter: fact check failed twice: ") and len(reason.split("twice: ", 1)[1]) <= 80
+    assert reason.split("twice: ", 1)[1] == problems[0][:80]
+
+
+def test_a_pronoun_or_a_host_action_next_to_a_missing_sentence_is_never_repaired(states):
+    s8 = copy.deepcopy(states["s8"])
+    for body, word in (("- He is blocked; e:s8:05 is cheaper.", "pronouns"), ("- e:s8:05 is a host action.", "host action")):
+        bad = with_fix(template(s8), body)
+        problems = reporter.check(bad, slice_of(s8))
+        assert any(p.startswith(reporter.ALT_PROBLEM) for p in problems) and any(word in p for p in problems), word
+        assert reporter._repair(bad, problems, slice_of(s8)) == (bad, [])
+
+
+def test_no_repair_when_the_guard_already_passes(states, monkeypatch):
+    s8 = copy.deepcopy(states["s8"])
+    good = template(s8)
+    events = []
+    gateway = Gateway(monkeypatch, say(good))
+    assert reporter.write(s8, emit=lambda *a, **kw: events.append(a)) == (good, False) and len(gateway.calls) == 1
+    assert events[-1][2]["source"] == "llm" and events[-1][2]["repairs"] == [] and reporter._repair(good, [], slice_of(s8)) == (good, [])
+
+
+def test_a_repair_that_does_not_pass_the_guard_falls_back_to_the_template(states, monkeypatch):
+    s8 = copy.deepcopy(states["s8"])
+    bad = with_fix(template(s8), "- Edit the role's trust policy.")
+    monkeypatch.setattr(reporter, "_alternative_sentence", lambda alt, slice_: "Another cut was cheaper.")  # a broken repair: still no eid, no number
+    markdown, degraded, calls, events = write_twice(s8, monkeypatch, bad)
+    assert degraded is True and events[-1][2]["source"] == "template"
+    assert s8["degraded_steps"][0].startswith("reporter: fact check failed twice: the Fix section must say")

@@ -190,7 +190,7 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | API | FastAPI + Uvicorn | Async, fast, auto docs at `/docs` |
 | MCP | Official MCP Python SDK 2.x (`mcp.server.mcpserver.MCPServer`; FastMCP no longer exists in 2.x), **stdio** transport | Standard. No port to secure. The same server works for external MCP clients on a laptop. |
 | LLM | `openai` Python SDK against OpenAI-compatible providers (Groq, then OpenRouter, called directly) + our `LLMGateway` (one retry, cache); fallback = restart the run on the next provider | One code path. Easy to explain. |
-| UI | Streamlit + a graph component (e.g. `streamlit-agraph` or `pyvis`) **[VERIFY pick on Day 3]** | Fastest way to build a usable UI in Python |
+| UI | Streamlit + `st.graphviz_chart` with a DOT string (the graph component was decided in P7.3: no extra dependency, see task.md decision log) | Fastest way to build a usable UI in Python |
 | Packaging | Docker Compose | One-command run |
 | Tests | pytest | Simple |
 
@@ -241,9 +241,9 @@ Full diagrams are in [04_Flow_Diagrams.md](04_Flow_Diagrams.md).
 | LLM outage, rate limit or refusal | One retry → **restart the agent run on the next provider** → **degrade to fast mode** + template report. The incident still finishes, marked `degraded: true`. |
 | Bad LLM output | Strict tool schemas + JSON validation of each handoff. One retry with the error, then fall back to the deterministic result. |
 | Hallucinated fix | Executor checks that every `eid` exists and isn't protected. Verifier proves the result. A wrong fix can't be reported as success. |
-| Long or slow queries | Per-query timeout **[VERIFY FalkorDB TIMEOUT config]** + hop bounds + `LIMIT` |
+| Long or slow queries | Per-query timeout `QUERY_TIMEOUT_MS`, enforced in `core/graph/client.py` on every query (verified in P3) + hop bounds + `LIMIT` |
 | DB durability | Redis AOF persistence on a Docker volume |
-| DB failover (scale path) | FalkorDB primary + replica (Redis replication), or managed FalkorDB Cloud **[VERIFY options]** |
+| DB failover (scale path) | FalkorDB primary + replica (Redis replication), or managed FalkorDB Cloud. **Scale path only: not tested** |
 | Demo safety | Seeded data, scenario reset endpoint, pre-recorded video as backup |
 
 ---

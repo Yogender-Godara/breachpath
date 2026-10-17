@@ -44,7 +44,7 @@ def start(sid, src, mode, token, instructions=""):
             st.session_state.run = {"mode": "agent", "tenant": sid, "src": src, "incident_id": created["incident_id"], "status": created["status"],
                                     "events": [], "last_id": "0-0", "state": None, "graph": None}
     except ApiError as e:
-        st.sidebar.error(f"{e.code}: {e.message}")
+        st.sidebar.error(view.error_text(e))
         return
     if mode == "Agent":
         st.rerun()  # the Run button was drawn before this click: redraw it disabled, so a second incident cannot be started
@@ -64,7 +64,7 @@ def sidebar():
                     info = api.load_scenario(sid)
                 st.success(f"Loaded {sid}: {info['nodes']} nodes, {info['edges']} edges")
             except ApiError as e:
-                st.error(f"{e.code}: {e.message}")
+                st.error(view.error_text(e))
         default_src = next(s["src"] for s in items if s["id"] == sid)
         try:
             users = api.users(sid)
@@ -134,7 +134,7 @@ def timeline_tab(run):
         try:
             changed = poll(current)
         except ApiError as e:
-            st.warning(f"{e.code}: {e.message}")
+            st.warning(view.error_text(e))
             return
         show_timeline(current)
         if changed:
@@ -195,7 +195,7 @@ def report_tab(run):
     made = next((e["data"] for e in reversed(run["events"]) if e["agent"] == "reporter" and e["type"] == "report" and (e["data"] or {}).get("source")), None)
     if made:
         st.caption({"llm": f"Written by {made['model']} ({made['provider']}), facts checked in code.",
-                    "llm+repaired": f"Written by {made['model']} ({made['provider']}); the Business impact section was replaced in code.",
+                    "llm+repaired": f"Written by {made['model']} ({made['provider']}); the code added what the fact check found missing: {', '.join(made.get('repairs') or ['a section'])}.",
                     "template": "Template report (the LLM was unavailable or its answer failed the fact check)."}[made["source"]])
     st.markdown(report["markdown"])
 
@@ -217,7 +217,7 @@ def main():
     try:
         sidebar()
     except ApiError as e:
-        st.error(f"{e.code}: {e.message}")
+        st.error(view.error_text(e))
         st.stop()
     run = st.session_state.get("run")
     graph, timeline, fix, report, eval_ = st.tabs(["Attack graph", "Agent timeline", "Fix & proof", "Report", "Eval"])

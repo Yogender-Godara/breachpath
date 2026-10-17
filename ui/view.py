@@ -15,6 +15,13 @@ LEGEND = ("🔴 compromised identity · 🟡 crown jewel · red dashed = removed
 SHAPES = {"User": "ellipse", "Group": "ellipse", "Role": "hexagon", "Policy": "note", "Server": "box3d", "Database": "cylinder", "Secret": "diamond"}
 
 
+def error_text(e):
+    """An ApiError as the UI shows it: a rate limit gets a plain sentence, everything else 'CODE: message'."""
+    if e.code == "RATE_LIMITED":
+        return "Too many requests: wait a minute and try again."
+    return f"{e.code}: {e.message}"
+
+
 def phase_of(status):
     """The status of an incident -> the phase the graph is drawn for (any final status is DONE)."""
     return "DONE" if status in TERMINAL else PHASE_OF[status]

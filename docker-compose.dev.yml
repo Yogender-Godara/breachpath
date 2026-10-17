@@ -16,6 +16,7 @@ services:
   # Throwaway Python 3.12 container for spikes, tests and data loading (no host installs needed)
   toolbox:
     build: .
+    user: root   # the image runs as a non-root user; the toolbox writes into the bind-mounted repo
     working_dir: /app
     volumes:
       - .:/app

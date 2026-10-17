@@ -26,11 +26,11 @@
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
 | P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
 | P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
-| P9 Hardening and deploy | Day 3 | 🟨 | 13 / 16 |
-| P10 Submission | Day 4 | ⬜ | 0 / 14 |
-| **Total** | | | **172 / 214** |
+| P9 Hardening and deploy | Day 3 | 🟨 | 23 / 28 |
+| P10 Submission | Day 4 | 🟨 | 7 / 14 |
+| **Total** | | | **189 / 226** |
 
-**Now working on:** P9.4 deploy decision (you), then P10.1 README
+**Now working on:** P10.2 your parts: AI usage, video, blog; P10.3 submit
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
 
 ---
@@ -468,6 +468,26 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** the numbers are recorded (whatever they are). ✅
 
+### P9.5 Demo-safety fixes 🟨 🤖
+- [x] Step 1: `/analyze` has its own limit `ANALYZE_RATE_LIMIT_PER_MIN` (60); agent mode keeps `RATE_LIMIT_PER_MIN` (10); the UI says "Too many requests: wait a minute and try again."; tests + LLD + README
+- [x] Step 2: the tests use their own job stream (`JOBS_STREAM=jobs:test`), proven with the worker running; README line removed
+- [x] Step 3: a fresh clone passes its tests: `data.scenarios.generate()` + a session fixture; proven with `data/generated` moved away
+- [x] Step 4: docs match the code (`/readyz`, the 3 stale `[VERIFY]` tags in the HLD)
+- [ ] Step 5: the live tests re-run once after P9 (found and fixed one regression, the S2 instruction test; 4 live tests have a pytest verdict, the rest only printed output: see the reply)
+- [x] Step 6: full suite, `check_fast_mode` 8/8 and `tests/test_readme.py` shown
+
+**Done when:** all six are shown with real output. (Step 5 is open: the first full live run was cut short and has no pytest summary.)
+
+### P9.6 Quality and efficiency 🟨 🤖
+- [x] Step 1: the Reporter repairs a good report after the failed retry (missing "why the chosen cut beats the alternative" sentence, missing operator-instruction sentence; anything else = template); the degraded reason says why (`fact check failed twice: <first problem, 80 chars>`); 8 new tests; replayed on 4 saved incidents (S2, S8, with and without an instruction); the repair also applied offline to the 4 real cached model answers: [VERIFY_RESULTS](docs/VERIFY_RESULTS.md) P9.6
+- [ ] Step 2 (optional) SKIPPED: `reasoning_effort` for Groq's gpt-oss. Not even the one probe call was made: the budget of 12 real LLM calls was used by Steps 1 and 4 (11 counted calls), and the step needs a probe plus 2 fresh runs
+- [x] Step 3: free eval columns (fast, disable, betweenness, frequency) re-run on all 8 scenarios: same numbers; `latest.md` lists the commit and time per method; README updated. The agent column was NOT refreshed (no LLM budget left) and the README says it was run at the older commit 55daa16
+- [x] Step 4: S7 Investigator, one fresh run (cache off, Groq, 3 calls): `llm_jewels` = [], `code_jewels` = ['db:s7-billing'], notes "LLM missed: db:s7-billing"; README wording now names this run (2026-10-17)
+- [x] Step 5 (optional): api, worker and ui run as uid 10001 (`Dockerfile`), the toolbox keeps root (`user: root` in the dev file); rebuilt, 4/4 healthy in about 40 s, one cached agent incident DONE through the worker (0 real calls)
+- [x] Step 6: `pytest -q -m "not live"` 656 passed, `check_fast_mode` 8/8, `tests/test_readme.py` 11 passed
+
+**Done when:** every step that was run is shown with real output (Step 2 skipped, with the reason). ✅ for the steps run
+
 ### P9.4 Free deployment (optional) ⬜ 🤖 + 👤
 - [ ] Shortlist free platforms. Check **private networking** (only the UI public) and the current free-tier limits.
 - [ ] Deploy, then smoke test S2 in fast mode
@@ -479,14 +499,14 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 ## P10: Submission (Day 4)
 
-### P10.1 README ⬜ 🤖 draft + 👤 review
-- [ ] What it does + the S2 story + screenshots
-- [ ] Architecture diagram + "3 LLM agents + 2 code workers"
-- [ ] **Graph data model** (labels, edges, properties)
-- [ ] **Cypher queries and algorithms used**: `algo.maxFlow`, `algo.bfs`, `algo.SPpaths`, `algo.betweenness`, `GRAPH.COPY`, variable-length paths
-- [ ] Why FalkorDB isn't decoration + "why not networkx"
-- [ ] Eval table + honest limitations + security scope
-- [ ] Setup steps (local) + live URL if any; Track 1 named
+### P10.1 README ✅ 🤖 draft + 👤 review
+- [x] What it does + the S2 story + screenshots
+- [x] Architecture diagram + "3 LLM agents + 2 code workers"
+- [x] **Graph data model** (labels, edges, properties)
+- [x] **Cypher queries and algorithms used**: `algo.maxFlow`, `algo.bfs`, `algo.SPpaths`, `algo.betweenness`, `GRAPH.COPY`, variable-length paths
+- [x] Why FalkorDB isn't decoration + "why not networkx"
+- [x] Eval table + honest limitations + security scope
+- [x] Setup steps (local) + live URL if any; Track 1 named
 
 **Done when:** a stranger could run it from the README alone.
 
@@ -516,6 +536,15 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 17 | Reporter repairs a missing sentence (P9.6) | after the retry a report that still failed the guard was always replaced by the template (only the "collateral claim without data" case was repaired) → `reporter._repair` also writes, from the state, (a) one sentence per alternative the Fix section left out (eids, collateral count and weighted, size, stale days) and (b) one sentence about the operator instruction (from `plan.instruction`, `plan.avoid`, `plan.default_fix`), but ONLY when every remaining problem is one of these (or the old collateral one); then `check()` runs again and must pass, else the template. Event `report`: `source: llm+repaired` + `repairs` list | The live logs show the common failure is a missing sentence the code can write; an invented id, a pronoun or a wrong "verified" still means the template. Honest note: in the 4-incident replay the retry fixed every case by itself, so the repair did not fire live; it was proven by 8 unit tests and offline on the 4 real cached first answers | Yes (LLD §6.2, README) |
+| Oct 17 | Degraded reason of the Reporter (P9.6) | `reporter: fact check failed twice` → `reporter: fact check failed twice: <first problem, max 80 chars>` (`short_reason` returns that label unchanged) | The UI and the report's degraded line showed THAT the template was used, not WHY | Yes (LLD §6.2) |
+| Oct 17 | Eval: when each method was run (P9.6) | one date and commit for the whole file → every row is stamped (`commit`, `run_at`); rows saved before get the file's own date and commit; `meta.method_runs` and a line "Each method was run at: ..." in `latest.md`. The 4 free methods were re-run (same numbers); the agent and B-LLM-JSON columns stay from 55daa16 | A merged results file mixes runs; the agent column is older than the code and must say so | Yes (README Evaluation) |
+| Oct 17 | README claim on S7 (P9.6) | "happened in a live run on 2026-10-16" → names the fresh run of 2026-10-17 (cache off, 3 calls, `llm_jewels` empty, `LLM missed: db:s7-billing`) | Real, re-checked evidence instead of a remembered run (the old date could not be verified) | Yes (README) |
+| Oct 17 | Containers run as non-root (P9.6) | root in api, worker, ui → `useradd` uid 10001, `COPY --chown`, `USER app`; the dev file's `toolbox` sets `user: root` (it writes into the bind-mounted repo). Volumes and the FalkorDB service are untouched | Least privilege for the three app containers; no code writes to disk, so nothing else had to change | Yes (README Security scope) |
+| Oct 17 | Planner turns with an instruction (P9.5) | P9.0 set `max_turns` 6 for every Planner run → 6 without an instruction, 8 with one (`planner.INSTRUCTION_MAX_TURNS`; not part of the LLM messages, so no cache key changes) | The live S2 test "Don't touch the build server" failed: Groq spent 5 turns mapping the instruction, its forced submit on turn 6 was refused (400 `tool_use_failed`), the run replayed on OpenRouter and the retry attempt used up the 20-call budget (degraded). With 8 turns it passes (honoured, cut `e:s2:05, e:s2:11`, proven). Still open: that run used 20 of 20 calls, so its report fell back to the template | Yes (LLD §6.2) |
+| Oct 17 | Rate limit per scope (P9.5) | one `RATE_LIMIT_PER_MIN` (10) for both → `POST /analyze` uses `ANALYZE_RATE_LIMIT_PER_MIN` (default 60), `POST /incidents` keeps `RATE_LIMIT_PER_MIN` (10); `api/checks.rate_limit` picks the limit by scope, each scope keeps its own counter; the UI shows "Too many requests: wait a minute and try again." for `RATE_LIMITED` | Everyone behind the UI shares one client IP (the UI container), so 10/min on the open, LLM-free fast mode limited ALL users together. Agent mode needs the demo token and spends LLM quota: it stays at 10 | Yes (LLD §9, §12, README) |
+| Oct 17 | Job stream name (P9.5) | the stream was the constant `jobs` → `STREAM = os.getenv("JOBS_STREAM", "jobs")` (`orchestrator/jobs.py`, also used by the API's `XADD`); `tests/conftest.py` sets `JOBS_STREAM=jobs:test` before any project import | The tests delete and refill the stream: a running worker took their jobs (and used to crash with `NOGROUP`). Now the suite runs next to a live worker | Yes (LLD §12) |
+| Oct 17 | Generated data in the tests (P9.5) | `data/generated` is not in git, so a fresh clone failed 73 tests → `data/scenarios.generate(ids)` (also writes `background.json`; `main()` only parses args) and a session-scoped autouse fixture in `tests/conftest.py` generates it when a file is missing. `python -m data.scenarios --all` still works (optional) | AC-8: a fresh clone must pass its own tests | Yes (README) |
 | Oct 16 | Rate limit on `/analyze` (P9.1) | only `POST /incidents` was limited → `POST /analyze` too, same `RATE_LIMIT_PER_MIN` per client IP, but its OWN counter (`ratelimit:{scope}:{ip}:{minute}`, helper `api/checks.rate_limit`) | HLD 11: "fast mode is open but rate-limited". Separate counters so fast clicks never use up the agent budget. Behind the UI all users share the UI container's IP (limit 10/min for everybody): raise `RATE_LIMIT_PER_MIN` for a public demo | Yes (LLD §8, §12) |
 | Oct 16 | Compose health and start order (P9.2) | no healthchecks for api/worker/ui, `ui` started after `api` → healthchecks with `python -c urllib` (no curl in the slim image): api `/readyz`, ui `/_stcore/health`, worker = some `worker:alive:*` key exists (the worker SETs it with a 60 s TTL on every loop turn and every 15 s during a job); `ui` waits for `api: service_healthy`; ui port `${UI_PORT:-8501}` | AC-8 needs a stack that says when it is ready; the fresh-clone test used `UI_PORT=8601` next to the main stack | Yes (LLD §8) |
 | Oct 16 | Worker resume after a crash (P9.2) | the restarted worker read its un-acked job once and forgot it if the dead worker's lock (60 s) was still held → `resume_pending` retries every 2 s for `LOCK_TTL_MS` + 5 s; `NOGROUP` (jobs stream deleted) creates the group again instead of crashing; the worker emits "worker picked up the incident" first | The chaos test would have left the incident stuck. The first event used to wait for the MCP subprocess start (L3 p50 1.4 s, now 65 ms). Docker note: `docker kill` is a manual stop and `unless-stopped` does NOT restart it; an OOM crash is restarted | Yes (LLD §8, failure table) |

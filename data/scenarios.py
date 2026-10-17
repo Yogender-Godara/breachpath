@@ -9,8 +9,8 @@ import yaml
 from data.generator import build_background, validate
 
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
-OUT_DIR = Path("data/generated")
-ANSWER_DIR = Path("data/answer_keys")
+OUT_DIR = Path(__file__).resolve().parent / "generated"  # absolute: the same folder whatever the working directory is
+ANSWER_DIR = Path(__file__).resolve().parent / "answer_keys"
 REQUIRED = ["id", "title", "src", "nodes", "edges", "background_links", "needs", "expect"]
 EDGE_KEYS = ["eid", "type", "src", "dst", "last_used_days"]
 
@@ -102,16 +102,24 @@ def build(sid):
     return combined
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("ids", nargs="*", help="scenario ids, e.g. s1 s2 s3")
-    ap.add_argument("--all", action="store_true", help="every data/scenarios/*.yaml")
-    args = ap.parse_args()
-    ids = sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml")) if args.all else args.ids
+ALL_IDS = [f"s{i}" for i in range(1, 9)]
+
+
+def generated_files_missing(ids=ALL_IDS):
+    """True when data/generated lacks background.json or one of the scenario files (a fresh clone: the folder is not in git)."""
+    return any(not (OUT_DIR / name).is_file() for name in ["background.json", *(f"{sid}.json" for sid in ids)])
+
+
+def generate(ids):
+    """Write data/generated/{sid}.json, background.json and data/answer_keys/{sid}.json for these scenarios, checking each against its `expect`."""
     from data.needs import build_needs  # imported here: needs.py imports reaches() from this module
     from data.truth import check_expect, compute_truth  # networkx: generator and eval only, never the API
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    background = build_background()  # data/generated/background.json: the background company alone (what `python -m data.generator` writes)
+    with open(OUT_DIR / "background.json", "w", newline="\n") as f:
+        json.dump(background, f, sort_keys=True, indent=1)
+        f.write("\n")
     for sid in ids:
         sc = load_scenario(SCENARIO_DIR / f"{sid}.yaml")
         combined = plant(build_background(), sc)
@@ -136,6 +144,14 @@ def main():
         print(f"{sid}: {len(combined['needs'])} needs ({by_source['explicit']} explicit, {by_source['usage']} usage, {invalid} invalid)")
         print(f"{sid}: answer key ok: {len(truth['true_paths'])} paths, cut {truth['min_cut_size']}, "
               f"safe {truth['safe_fix_exists']}, {len(truth['protected_eids'])} protected edges")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("ids", nargs="*", help="scenario ids, e.g. s1 s2 s3")
+    ap.add_argument("--all", action="store_true", help="every data/scenarios/*.yaml")
+    args = ap.parse_args()
+    generate(sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml")) if args.all else args.ids)
 
 
 if __name__ == "__main__":

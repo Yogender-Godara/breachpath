@@ -299,6 +299,14 @@ def test_an_honoured_instruction_gives_a_different_cut_that_is_still_proven(db, 
     assert [m for t, m, d in events if "rejected" in m] == []
 
 
+def test_an_instruction_run_gets_8_turns_a_normal_run_6(db):
+    """P9.5: live S2 + "Don't touch the build server" spent 5 turns mapping the instruction (get_edge, choke_points) and had none left to submit."""
+    assert planner.SPEC.max_turns == 6
+    spec = planner._spec_for({"instructions": "Leave the build server alone."})
+    assert spec.max_turns == 8 == planner.INSTRUCTION_MAX_TURNS and "OPERATOR INSTRUCTIONS" in spec.system
+    assert planner._spec_for({"instructions": ""}) is planner.SPEC
+
+
 def test_a_normal_run_has_no_instruction_block_so_its_cache_keys_do_not_change(db, monkeypatch):
     with prepared(*S8) as (state, token):
         gw = Gateway(monkeypatch, submit(["e:s8:05"]))

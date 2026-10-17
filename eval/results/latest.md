@@ -1,6 +1,8 @@
 # BreachPath evaluation
 
-Run 2026-10-16 09:37 UTC · commit 55daa16 · models: B-LLM-JSON: groq/openai/gpt-oss-120b; investigator: groq/openai/gpt-oss-120b; planner: groq/openai/gpt-oss-120b; reporter: groq/openai/gpt-oss-120b
+Run 2026-10-17 06:56 UTC · commit 8359e6d · models: B-LLM-JSON: groq/openai/gpt-oss-120b; investigator: groq/openai/gpt-oss-120b; planner: groq/openai/gpt-oss-120b; reporter: groq/openai/gpt-oss-120b
+
+Each method was run at: BreachPath (fast): commit 8359e6d at 2026-10-17 06:56 UTC; BreachPath (agent): commit 55daa16 at 2026-10-16 09:37 UTC; B-disable: commit 8359e6d at 2026-10-17 06:56 UTC; B-betweenness: commit 8359e6d at 2026-10-17 06:56 UTC; B-frequency: commit 8359e6d at 2026-10-17 06:56 UTC; B-LLM-JSON: commit 55daa16 at 2026-10-16 09:37 UTC.
 
 | scenario | BreachPath (fast) | BreachPath (agent) | B-disable | B-betweenness | B-frequency | B-LLM-JSON |
 |---|---|---|---|---|---|---|

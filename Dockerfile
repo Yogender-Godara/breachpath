@@ -10,4 +10,7 @@ WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install -r requirements.txt -r requirements-dev.txt
 
-COPY . .
+# api, worker and ui run as this user (not root). The toolbox of docker-compose.dev.yml sets `user: root`: it writes into the bind-mounted repo.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app
+COPY --chown=app:app . .
+USER app

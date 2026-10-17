@@ -93,7 +93,7 @@ def l2(n):
     from fastapi.testclient import TestClient
     from api.main import app
     from core.graph import loader
-    config.RATE_LIMIT_PER_MIN = 10**6
+    config.ANALYZE_RATE_LIMIT_PER_MIN = 10**6
     client, ms, per_scenario = TestClient(app), [], {}
     for i in range(1, 9):
         sid = f"s{i}"

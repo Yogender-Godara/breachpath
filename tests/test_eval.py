@@ -278,3 +278,16 @@ def test_eval_latest_reads_redis_then_the_file_then_404(api, monkeypatch, tmp_pa
     assert client.get("/v1/eval/latest").json() == {"meta": {"from": "file"}}
     redis.set("eval:latest", json.dumps({"meta": {"from": "redis"}}))
     assert client.get("/v1/eval/latest").json() == {"meta": {"from": "redis"}}
+
+
+def test_the_markdown_says_when_and_at_which_commit_each_method_was_run(scenarios):
+    keys = {sid: key for sid, (_, key) in scenarios.items()}
+    rows = [{**fake_row("s2", "fast"), "commit": "abc1234", "run_at": "2026-10-17 10:00 UTC"},
+            {**fake_row("s2", "agent"), "commit": "55daa16", "run_at": "2026-10-16 09:37 UTC"},
+            {**fake_row("s8", "agent"), "commit": "abc1234", "run_at": "2026-10-17 11:00 UTC"}, fake_row("s2", "disable")]
+    doc = run_eval.document(rows, ["s2", "s8"], ["fast", "agent", "disable"], keys, 8)
+    assert doc["meta"]["method_runs"] == {"fast": ["commit abc1234 at 2026-10-17 10:00 UTC"],
+                                         "agent": ["commit 55daa16 at 2026-10-16 09:37 UTC", "commit abc1234 at 2026-10-17 11:00 UTC"],
+                                         "disable": ["commit unknown at unknown time"]}
+    assert ("Each method was run at: BreachPath (fast): commit abc1234 at 2026-10-17 10:00 UTC; BreachPath (agent): commit 55daa16 at 2026-10-16 09:37 UTC "
+            "and commit abc1234 at 2026-10-17 11:00 UTC; B-disable: commit unknown at unknown time.") in doc["markdown"]

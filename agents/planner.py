@@ -32,9 +32,15 @@ SPEC = AgentSpec(
 INSTRUCTION_PROMPT = (Path(__file__).parent / "prompts" / "planner_instructions.md").read_text(encoding="utf-8").strip()
 
 
+INSTRUCTION_MAX_TURNS = 8  # mapping a free-text instruction to edges takes extra turns (get_node / get_edge): 6 left no room to submit (P9.5)
+
+
 def _spec_for(state):
-    """The operator-instruction block is added to the system prompt ONLY when there is an instruction, so a normal run keeps its LLM cache keys."""
-    return replace(SPEC, system=f"{SPEC.system}\n\n{INSTRUCTION_PROMPT}") if state.get("instructions") else SPEC
+    """The operator-instruction block is added to the system prompt ONLY when there is an instruction, so a normal run keeps its LLM cache keys.
+    max_turns is not part of the messages, so the longer limit does not change any cache key either."""
+    if not state.get("instructions"):
+        return SPEC
+    return replace(SPEC, system=f"{SPEC.system}\n\n{INSTRUCTION_PROMPT}", max_turns=INSTRUCTION_MAX_TURNS)
 
 
 def sim_key(eids):

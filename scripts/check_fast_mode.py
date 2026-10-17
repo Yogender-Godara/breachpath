@@ -126,7 +126,7 @@ def check(client, sid):
 
 
 def main(ids):
-    config.RATE_LIMIT_PER_MIN = 10**6  # this is a checker, not a load test: /analyze is rate-limited per IP otherwise
+    config.ANALYZE_RATE_LIMIT_PER_MIN = 10**6  # this is a checker, not a load test: /analyze is rate-limited per IP otherwise
     client = TestClient(app)
     cols = ["sid", "status", "jewels", "paths", "cut", "proof", "needs", "collateral", "ms"]
     print("sid | status | jewels | paths found/true | cut size/min | maxflow, bfs | needs ok | collateral | ms | result")

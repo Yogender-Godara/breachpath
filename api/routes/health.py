@@ -13,7 +13,7 @@ def healthz():
 
 @router.get("/readyz")
 def readyz():
-    # P6 adds the MCP check here (the worker's stdio subprocess); for now readiness = FalkorDB answers PING.
+    # Readiness = FalkorDB answers PING. There is no MCP check: each agent step opens its own stdio session, so there is nothing to ping.
     try:
         get_db().connection.ping()
     except Exception as e:

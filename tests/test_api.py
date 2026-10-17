@@ -17,6 +17,7 @@ from core.pipeline import run_incident
 from core.tools import write
 from data.scenarios import build
 from orchestrator import events, state as state_store
+from orchestrator.jobs import STREAM
 from orchestrator.lock import hold_lock
 from orchestrator.state import new_state
 from tests.helpers import SCENARIOS
@@ -31,7 +32,7 @@ def api(falkordb, monkeypatch):
     monkeypatch.setattr(config, "DEMO_TOKEN", TOKEN)
     redis = graph_client.get_db().connection
     made = []
-    had_jobs = redis.exists("jobs")
+    had_jobs = redis.exists(STREAM)
 
     def wipe():
         for pattern in KEY_PATTERNS:
@@ -47,11 +48,11 @@ def api(falkordb, monkeypatch):
     wipe()
     for incident_id in made:
         redis.delete(f"inc:{incident_id}", f"inc:{incident_id}:events", f"lock:inc:{incident_id}", f"quota:inc:{incident_id}:sims")
-    for stream_id, fields in redis.xrange("jobs"):
+    for stream_id, fields in redis.xrange(STREAM):
         if (fields.get(b"incident_id") or fields.get("incident_id")) in {i.encode() for i in made} | set(made):
-            redis.xdel("jobs", stream_id)
-    if not had_jobs and redis.xlen("jobs") == 0:
-        redis.delete("jobs")  # the stream did not exist before this test
+            redis.xdel(STREAM, stream_id)
+    if not had_jobs and redis.xlen(STREAM) == 0:
+        redis.delete(STREAM)  # the stream did not exist before this test
     for g in graph_client.get_db().list_graphs():
         if any(f":sbx:{i}" in g for i in made):
             graph_client.delete_graph(g)
@@ -201,7 +202,7 @@ def test_incident_created_stays_queued_and_is_in_the_jobs_stream(api):
     r = post_incident(api)
     assert r.status_code == 202 and r.json()["status"] == "QUEUED"
     incident_id = r.json()["incident_id"]
-    jobs = [f for _, f in graph_client.get_db().connection.xrevrange("jobs", count=50)]
+    jobs = [f for _, f in graph_client.get_db().connection.xrevrange(STREAM, count=50)]
     assert any((f.get(b"incident_id") or f.get("incident_id")) in (incident_id.encode(), incident_id) for f in jobs)
     state = api.get(f"/v1/incidents/{incident_id}").json()
     assert state["status"] == "QUEUED" and state["mode"] == "agent" and state["src"] == "user:ravi"
@@ -254,14 +255,39 @@ def test_rate_limit(api, monkeypatch):
     err(post_incident(api), 429, "RATE_LIMITED")
 
 
-def test_analyze_is_open_but_rate_limited_per_ip_and_the_scopes_are_separate(api, monkeypatch):
-    monkeypatch.setattr(config, "RATE_LIMIT_PER_MIN", 2)
+@pytest.fixture
+def same_minute(monkeypatch):
+    """The rate limit counts per clock minute: freeze it so a slow test cannot cross a minute boundary."""
+    monkeypatch.setattr("api.checks.time", type("T", (), {"time": staticmethod(lambda: 1_800_000_000.0)}))
+
+
+def test_analyze_allows_60_per_minute_and_the_61st_gets_429(api, same_minute):
+    assert config.ANALYZE_RATE_LIMIT_PER_MIN == 60 and config.RATE_LIMIT_PER_MIN == 10  # the defaults
     body = {"tenant": "s2", "src": "user:ravi"}
-    assert [api.post("/v1/analyze", json=body).status_code for _ in range(2)] == [200, 200]  # no token needed
+    assert {api.post("/v1/analyze", json=body).status_code for _ in range(60)} == {200}  # open: no token, and normal use is never blocked
     err(api.post("/v1/analyze", json=body), 429, "RATE_LIMITED")
-    assert post_incident(api).status_code == 202  # fast clicks do not use up the agent-mode budget
+    assert "60 requests per minute" in api.post("/v1/analyze", json=body).json()["error"]["message"]
+    assert graph_client.get_db().connection.scard("active:s2") == 0  # the 429 happened before the run: nothing left active
+
+
+def test_incidents_stay_at_10_per_minute_and_the_two_scopes_do_not_share_a_counter(api, same_minute, monkeypatch):
+    monkeypatch.setattr(config, "MAX_ACTIVE_AGENT", 99)
+    body = {"tenant": "s2", "src": "user:ravi"}
+    for _ in range(11):  # the analyze counter is at 11 ...
+        assert api.post("/v1/analyze", json=body).status_code == 200
+    assert [post_incident(api).status_code for _ in range(10)] == [202] * 10  # ... and the agent counter still has its 10
+    err(post_incident(api), 429, "RATE_LIMITED")
+    assert api.post("/v1/analyze", json=body).status_code == 200  # agent mode used up its limit: fast mode is not affected
     redis = graph_client.get_db().connection
-    assert redis.scard("active:s2") == 1  # the 429 happened before the run: no incident, nothing left active (only the agent one)
+    assert (redis.get("ratelimit:analyze:testclient:30000000"), redis.get("ratelimit:incidents:testclient:30000000")) == ("12", "11")
+
+
+def test_a_rate_limit_setting_changes_only_its_own_scope(api, same_minute, monkeypatch):
+    monkeypatch.setattr(config, "ANALYZE_RATE_LIMIT_PER_MIN", 2)
+    body = {"tenant": "s2", "src": "user:ravi"}
+    assert [api.post("/v1/analyze", json=body).status_code for _ in range(2)] == [200, 200]
+    err(api.post("/v1/analyze", json=body), 429, "RATE_LIMITED")
+    assert [post_incident(api).status_code for _ in range(2)] == [202, 202]  # RATE_LIMIT_PER_MIN is still 10
 
 
 # --- events and graph ---

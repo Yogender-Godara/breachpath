@@ -191,3 +191,28 @@ Local Docker (WSL2) on a laptop, 1 worker. Raw numbers: p50 / p95 over n samples
 | `POST /incidents` accept, p50 | < 100 ms | 12 ms |
 
 The agent pipeline itself (graph work, sandbox, proof) is fast; the end-to-end time of a real agent run is the free-tier LLM latency (Groq 8000 tokens/minute, OpenRouter 50 requests/day), which is why the response cache exists.
+
+## P9.6 Quality and efficiency (2026-10-17, measured, nothing estimated)
+
+**LLM budget:** 12 real calls were allowed. Used (counted by the scripts): 8 in the Reporter replay + 3 in the S7 run = 11. The Groq log also shows 2 rate-limit retries (2 s, 19 s) inside the Reporter replay that were not counted as calls.
+
+**Step 1: the Reporter repair.** `reporter.write(state)` on the saved states of 4 finished incidents (Redis `inc:<id>`, the degraded step of the Reporter removed so the slice is the one the Reporter originally saw), twice: once with `_repair` switched off (the old behaviour) and once with the new code. Today's providers: Groq first. The second pass reads the first pass's answers from the LLM cache, so both passes see the same model text.
+
+| incident | scenario | instruction | saved report source | old code, replayed today | new code, replayed today | real calls | problems of the model's attempt 1 |
+|---|---|---|---|---|---|---|---|
+| d002ccac | S8 | no | llm | llm | llm | 1 | missing sentence about alternative e:s8:07; attempt 2 passes |
+| 1f492a18 | S8 | "Do not change anything between user:max and the reports database." | llm | llm | llm | 2 | missing sentence about e:s8:07; attempt 2 passes |
+| b5d524f9 | S8 | legacy-role instruction | **template** | **template** (Groq attempt 2 hit a 429, OpenRouter answered without the Next steps heading: not repairable; 143 s) | llm (Groq attempt 2 passed; 2.6 s) | 5 (4 old pass, 1 new pass) | missing sentences about e:s8:05 and e:s8:07 |
+| d941fed7 | S2 | no | **template** | llm (cached Groq answers from later S2 runs) | llm | 0 | missing sentence about e:s2:08, e:s2:11; attempt 2 passes |
+
+Fell back to the template: **saved 2 of 4, old code replayed today 1 of 4, new code replayed today 0 of 4.** **Honest reading: the repair did not fire in any of these live replays** (`repairs=[]` every time): in all four the model's second answer was good, or the failure was a different, unrepairable one (OpenRouter's missing heading). The drop from 1 to 0 on b5d524f9 is Groq answering instead of rate-limiting, not the repair. Time per state with the answers cached: 12-17 ms; with real calls 2-6 s (143 s with the rate limit).
+
+Because the repair did not run live, it was applied **offline to the 4 real first answers** (read from the LLM cache, no call): each had 1 or 2 missing-alternative problems, `_repair` added the sentence(s), and the guard passed afterwards in all 4. Example, S8 (final wording): "The alternative e:s8:07 was not chosen: it blocks the attack, would make 12 (user, resource) pair(s) lose access (weighted 12) against 0 for the chosen cut, and has size 1 and 150 stale days in total." Unit tests (`tests/test_reporter.py`, 8 new): missing alternative sentence repaired; missing instruction mention repaired (honoured, no change, not honoured); both together; an invented eid next to a missing sentence = template with the reason; a pronoun or a host action next to a missing sentence = no repair; guard already passing = no repair, `repairs` empty; a repair that still fails the guard = template.
+
+**Step 2 (`reasoning_effort`): skipped.** No probe call was made: the budget was used by Steps 1 and 4, and the step also needs 2 fresh runs. Nothing about Groq's acceptance of `reasoning_effort` is known yet.
+
+**Step 3: free evaluation numbers.** `python -m eval.run_eval --methods fast,disable,betweenness,frequency`, all 8 scenarios, 0 LLM calls, 2026-10-17 06:56 UTC, HEAD 8359e6d plus the uncommitted work of the day (the hash cannot show that). Every number is the same as in the 2026-10-16 run (fast 7/7 safe, disable 4/7 and 6 needs broken, betweenness 6/7 and weighted collateral 12, frequency 4/7 and 4 broken). The agent and B-LLM-JSON cells were kept from the 2026-10-16 09:37 UTC run at commit 55daa16; they were not refreshed (no LLM budget left). `latest.md` now says per method when and at which commit it was run.
+
+**Step 4: S7, the Investigator, one fresh run** (`LLM_CACHE=off`, `LLM_MAX_CALLS_PER_INCIDENT=4`, `pytest -s -m live tests/test_investigator.py::test_live_s7_beyond_the_hop_bound_has_no_paths`, no prompt change): incident e9a5dfaf, provider groq (`openai/gpt-oss-120b`), 3 turns, 3 calls, none cached, tokens 2877 in / 208 out, not degraded. Finding event: **`llm_jewels` = [], `code_jewels` = ['db:s7-billing']**, `valid_paths` 0, notes "The compromised identity user:nia cannot reach any crown-jewel databases within 6 hops. LLM missed: db:s7-billing." The model missed the jewel; the code BFS found it.
+
+**Step 5: non-root containers.** `Dockerfile`: `useradd --uid 10001 app`, `COPY --chown=app:app`, `USER app`; `docker-compose.dev.yml`: `toolbox` gets `user: root`. `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` took 22 s (layers cached); 40 s later api, worker, ui and falkordb were all `healthy`. `id -u`: api 10001, worker 10001, ui 10001, falkordb 0 (unchanged). One S2 agent incident through the API and the worker (ed6be824): DONE, not degraded, 7.0 s, 20 of 20 LLM answers from the cache (0 real calls), report source `llm`. No volume and no FalkorDB service line was changed.

@@ -241,6 +241,15 @@ def test_an_api_error_is_shown_in_the_sidebar(app, monkeypatch):
     assert any("NOT_FOUND: no baseline for that tenant" in e.value for e in app.sidebar.error)
 
 
+def test_a_rate_limited_run_says_wait_a_minute_not_the_raw_code(app, monkeypatch):
+    def limited(tenant, src):
+        raise api_client.ApiError("RATE_LIMITED", "more than 60 requests per minute")
+    monkeypatch.setattr(api_client, "analyze", limited)
+    button(app, "Run").click().run()
+    assert [e.value for e in app.sidebar.error] == ["Too many requests: wait a minute and try again."]
+    assert view.error_text(api_client.ApiError("NOT_FOUND", "x")) == "NOT_FOUND: x"  # every other error keeps its code
+
+
 def test_an_agent_run_starts_with_the_token_and_the_run_button_is_disabled_while_it_runs(app):
     app.sidebar.text_input[0].input("tok").run()
     app.sidebar.radio(key="mode").set_value("Agent").run()

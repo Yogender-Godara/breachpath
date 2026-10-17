@@ -22,11 +22,12 @@ def check_target(tenant, src):
 
 
 def rate_limit(redis, request, scope):
-    """At most RATE_LIMIT_PER_MIN requests per minute per client IP, counted per scope ("incidents" = agent mode, "analyze" = fast mode: an open
-    endpoint stays rate-limited, HLD 11, and fast clicks never use up the agent budget). Behind a proxy the IP is the proxy's."""
+    """Per client IP and minute, counted per scope: "incidents" (agent mode) allows RATE_LIMIT_PER_MIN, "analyze" (fast mode: open, no LLM, HLD 11)
+    allows ANALYZE_RATE_LIMIT_PER_MIN. Each scope has its own counter. Behind the UI every user has the UI container's IP, so these are shared limits."""
     ip = request.client.host if request.client else "unknown"
     key = f"ratelimit:{scope}:{ip}:{int(time.time() // 60)}"
     count = redis.incr(key)
     redis.expire(key, 60)
-    if count > config.RATE_LIMIT_PER_MIN:
-        raise ApiError(429, "RATE_LIMITED", f"more than {config.RATE_LIMIT_PER_MIN} requests per minute")
+    limit = config.ANALYZE_RATE_LIMIT_PER_MIN if scope == "analyze" else config.RATE_LIMIT_PER_MIN
+    if count > limit:
+        raise ApiError(429, "RATE_LIMITED", f"more than {limit} requests per minute")

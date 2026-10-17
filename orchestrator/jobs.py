@@ -1,7 +1,10 @@
 """The job stream (docs/03_LLD.md section 8): the API adds an incident id, the worker consumes it from the group."""
+import os
+
 from redis.exceptions import ResponseError
 
-STREAM, GROUP = "jobs", "workers"
+# JOBS_STREAM: the tests use their own stream ("jobs:test", tests/conftest.py), so a running worker can never take a test's job
+STREAM, GROUP = os.getenv("JOBS_STREAM", "jobs"), "workers"
 
 
 def ensure_group(redis):

@@ -1,7 +1,7 @@
 {
  "meta": {
-  "date": "2026-10-16 09:37 UTC",
-  "commit": "55daa16",
+  "date": "2026-10-17 06:56 UTC",
+  "commit": "8359e6d",
   "scenarios": [
    "s1",
    "s2",
@@ -26,7 +26,27 @@
    "planner: groq/openai/gpt-oss-120b",
    "reporter: groq/openai/gpt-oss-120b"
   ],
-  "pause_s": 15.0
+  "pause_s": 8.0,
+  "method_runs": {
+   "fast": [
+    "commit 8359e6d at 2026-10-17 06:56 UTC"
+   ],
+   "agent": [
+    "commit 55daa16 at 2026-10-16 09:37 UTC"
+   ],
+   "disable": [
+    "commit 8359e6d at 2026-10-17 06:56 UTC"
+   ],
+   "betweenness": [
+    "commit 8359e6d at 2026-10-17 06:56 UTC"
+   ],
+   "frequency": [
+    "commit 8359e6d at 2026-10-17 06:56 UTC"
+   ],
+   "llm_json": [
+    "commit 55daa16 at 2026-10-16 09:37 UTC"
+   ]
+  }
  },
  "rows": [
   {
@@ -34,7 +54,7 @@
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 85,
+   "latency_ms": 342,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -62,7 +82,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s2",
@@ -101,7 +123,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s2",
@@ -141,14 +165,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s2",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 5,
+   "latency_ms": 17,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -178,14 +204,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s2",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -216,7 +244,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s2",
@@ -254,14 +284,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s1",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 83,
+   "latency_ms": 329,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -288,7 +320,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s1",
@@ -326,7 +360,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s1",
@@ -361,14 +397,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s1",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 12,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -395,14 +433,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s1",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -429,7 +469,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s1",
@@ -466,14 +508,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s3",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 63,
+   "latency_ms": 282,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -500,7 +544,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s3",
@@ -538,7 +584,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s3",
@@ -575,14 +623,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s3",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 10,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -609,14 +659,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s3",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -645,7 +697,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s3",
@@ -682,14 +736,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s4",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 82,
+   "latency_ms": 313,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -716,7 +772,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s4",
@@ -754,7 +812,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s4",
@@ -790,14 +850,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s4",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 12,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -824,14 +886,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s4",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -858,7 +922,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s4",
@@ -895,14 +961,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s5",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 52,
+   "latency_ms": 286,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -929,7 +997,9 @@
     "verdict_correct": true,
     "fixes_attack": false,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s5",
@@ -966,7 +1036,9 @@
     "verdict_correct": true,
     "fixes_attack": false,
     "safe_fix": false
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s5",
@@ -1004,14 +1076,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s5",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 11,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1040,14 +1114,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s5",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1076,7 +1152,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s5",
@@ -1113,14 +1191,16 @@
     "verdict_correct": null,
     "fixes_attack": false,
     "safe_fix": false
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s6",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 81,
+   "latency_ms": 323,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1148,7 +1228,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s6",
@@ -1187,7 +1269,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s6",
@@ -1222,14 +1306,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s6",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 6,
+   "latency_ms": 17,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1257,14 +1343,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s6",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1292,7 +1380,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s6",
@@ -1330,14 +1420,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s7",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 99,
+   "latency_ms": 226,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1364,7 +1456,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s7",
@@ -1402,7 +1496,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s7",
@@ -1437,14 +1533,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s7",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 6,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1471,14 +1569,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s7",
    "method": "frequency",
    "provider": "code",
    "models": {},
-   "latency_ms": 1,
+   "latency_ms": 2,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1505,7 +1605,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s7",
@@ -1542,14 +1644,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s8",
    "method": "fast",
    "provider": "code",
    "models": {},
-   "latency_ms": 114,
+   "latency_ms": 237,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1576,7 +1680,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s8",
@@ -1614,7 +1720,9 @@
     "verdict_correct": true,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   },
   {
    "scenario": "s8",
@@ -1652,14 +1760,16 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s8",
    "method": "betweenness",
    "provider": "code",
    "models": {},
-   "latency_ms": 3,
+   "latency_ms": 8,
    "tokens_in": 0,
    "tokens_out": 0,
    "degraded": false,
@@ -1686,7 +1796,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s8",
@@ -1722,7 +1834,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": false
-   }
+   },
+   "commit": "8359e6d",
+   "run_at": "2026-10-17 06:56 UTC"
   },
   {
    "scenario": "s8",
@@ -1759,7 +1873,9 @@
     "verdict_correct": null,
     "fixes_attack": true,
     "safe_fix": true
-   }
+   },
+   "commit": "55daa16",
+   "run_at": "2026-10-16 09:37 UTC"
   }
  ],
  "table": [
@@ -1837,5 +1953,5 @@
   }
  ],
  "summary": "8 scenarios, 7 of which have a safe fix (s5 has none). A fix is safe when no crown jewel stays reachable and no business need breaks, measured by networkx. BreachPath (fast): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. BreachPath (agent): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-disable: a safe fix in 4 of 7 scenarios, 6 business need(s) broken in total, weighted collateral 0, mean fix gap 1.00. B-betweenness: a safe fix in 6 of 7 scenarios, 1 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. B-frequency: a safe fix in 4 of 7 scenarios, 4 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-LLM-JSON: a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. Compared with BreachPath (fast): no baseline matched it on all three; B-disable, B-betweenness, B-frequency, B-LLM-JSON did worse on at least one of them. BreachPath (fast) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios. BreachPath (agent) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios.",
- "markdown": "# BreachPath evaluation\n\nRun 2026-10-16 09:37 UTC · commit 55daa16 · models: B-LLM-JSON: groq/openai/gpt-oss-120b; investigator: groq/openai/gpt-oss-120b; planner: groq/openai/gpt-oss-120b; reporter: groq/openai/gpt-oss-120b\n\n| scenario | BreachPath (fast) | BreachPath (agent) | B-disable | B-betweenness | B-frequency | B-LLM-JSON |\n|---|---|---|---|---|---|---|\n| s1 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s2 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +1) · residual 0 · broken 3 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 2 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s3 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s4 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +2) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s5 | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap –) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s6 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s7 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – |\n| s8 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) · jewels 100%, paths R 100% / P 100% |\n\ngap = cut size − brute-force optimum (0 = perfect, – = no optimum); residual = max flow left after the cut (0 = blocked); broken = business needs that lose their path; collateral = (other user, resource) pairs that lose access, w = weighted (recent 3, stale 1); jewels = blast-radius recall; R / P = path recall@20 / precision (– = nothing to measure); all measured by networkx, independent of the product.\n\n## What the table shows\n\n8 scenarios, 7 of which have a safe fix (s5 has none). A fix is safe when no crown jewel stays reachable and no business need breaks, measured by networkx. BreachPath (fast): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. BreachPath (agent): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-disable: a safe fix in 4 of 7 scenarios, 6 business need(s) broken in total, weighted collateral 0, mean fix gap 1.00. B-betweenness: a safe fix in 6 of 7 scenarios, 1 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. B-frequency: a safe fix in 4 of 7 scenarios, 4 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-LLM-JSON: a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. Compared with BreachPath (fast): no baseline matched it on all three; B-disable, B-betweenness, B-frequency, B-LLM-JSON did worse on at least one of them. BreachPath (fast) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios. BreachPath (agent) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios.\n"
+ "markdown": "# BreachPath evaluation\n\nRun 2026-10-17 06:56 UTC · commit 8359e6d · models: B-LLM-JSON: groq/openai/gpt-oss-120b; investigator: groq/openai/gpt-oss-120b; planner: groq/openai/gpt-oss-120b; reporter: groq/openai/gpt-oss-120b\n\nEach method was run at: BreachPath (fast): commit 8359e6d at 2026-10-17 06:56 UTC; BreachPath (agent): commit 55daa16 at 2026-10-16 09:37 UTC; B-disable: commit 8359e6d at 2026-10-17 06:56 UTC; B-betweenness: commit 8359e6d at 2026-10-17 06:56 UTC; B-frequency: commit 8359e6d at 2026-10-17 06:56 UTC; B-LLM-JSON: commit 55daa16 at 2026-10-16 09:37 UTC.\n\n| scenario | BreachPath (fast) | BreachPath (agent) | B-disable | B-betweenness | B-frequency | B-LLM-JSON |\n|---|---|---|---|---|---|---|\n| s1 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s2 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +1) · residual 0 · broken 3 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 2 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s3 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s4 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 3 (gap +2) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s5 | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap –) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap –) · residual 0 · broken 1 · collateral 0 (w 0) | cut 0 (gap –) · residual 1 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s6 | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 2 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% |\n| s7 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R – / P – |\n| s8 | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 1 (gap 0) · residual 0 · broken 0 · collateral 0 (w 0) · jewels 100%, paths R 100% / P 100% · verdict ✔ | cut 2 (gap +1) · residual 0 · broken 2 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) | cut 1 (gap 0) · residual 0 · broken 1 · collateral 0 (w 0) | cut 1 (gap 0) · residual 0 · broken 0 · collateral 12 (w 12) · jewels 100%, paths R 100% / P 100% |\n\ngap = cut size − brute-force optimum (0 = perfect, – = no optimum); residual = max flow left after the cut (0 = blocked); broken = business needs that lose their path; collateral = (other user, resource) pairs that lose access, w = weighted (recent 3, stale 1); jewels = blast-radius recall; R / P = path recall@20 / precision (– = nothing to measure); all measured by networkx, independent of the product.\n\n## What the table shows\n\n8 scenarios, 7 of which have a safe fix (s5 has none). A fix is safe when no crown jewel stays reachable and no business need breaks, measured by networkx. BreachPath (fast): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. BreachPath (agent): a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-disable: a safe fix in 4 of 7 scenarios, 6 business need(s) broken in total, weighted collateral 0, mean fix gap 1.00. B-betweenness: a safe fix in 6 of 7 scenarios, 1 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. B-frequency: a safe fix in 4 of 7 scenarios, 4 business need(s) broken in total, weighted collateral 0, mean fix gap 0.00. B-LLM-JSON: a safe fix in 7 of 7 scenarios, 0 business need(s) broken in total, weighted collateral 12, mean fix gap 0.00. Compared with BreachPath (fast): no baseline matched it on all three; B-disable, B-betweenness, B-frequency, B-LLM-JSON did worse on at least one of them. BreachPath (fast) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios. BreachPath (agent) gave the right safe / NEEDS_HUMAN verdict in 8 of 8 scenarios.\n"
 }

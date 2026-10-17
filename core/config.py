@@ -28,7 +28,8 @@ LLM_MAX_CALLS_PER_INCIDENT = int(os.getenv("LLM_MAX_CALLS_PER_INCIDENT", "20")) 
 LLM_CACHE = os.getenv("LLM_CACHE", "on").strip().lower() in ("on", "true", "1")
 LLM_CACHE_TTL_S = int(os.getenv("LLM_CACHE_TTL_S", str(7 * 24 * 3600)))
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")  # empty = agent mode is disabled
-RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "10"))
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "10"))  # POST /incidents (agent mode: needs the demo token and spends LLM quota), per client IP
+ANALYZE_RATE_LIMIT_PER_MIN = int(os.getenv("ANALYZE_RATE_LIMIT_PER_MIN", "60"))  # POST /analyze (fast mode, no LLM, open): behind the UI all users share ONE IP
 MAX_ACTIVE_AGENT = int(os.getenv("MAX_ACTIVE_AGENT", "2"))
 LOCK_TTL_MS = int(os.getenv("LOCK_TTL_MS", "60000"))
 LOCK_HEARTBEAT_S = float(os.getenv("LOCK_HEARTBEAT_S", "15"))

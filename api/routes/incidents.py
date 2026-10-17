@@ -15,7 +15,7 @@ from api.routes.scenarios import ACTIVE_TTL_S
 from core import config
 from core.graph.client import get_db
 from orchestrator import events, state as state_store
-from orchestrator.jobs import ensure_group
+from orchestrator.jobs import STREAM, ensure_group
 from orchestrator.state import new_state
 
 router = APIRouter(prefix="/v1")
@@ -62,7 +62,7 @@ def create_incident(body: IncidentBody, request: Request, x_demo_token: str | No
         redis.sadd(key, state["id"])
         redis.expire(key, ACTIVE_TTL_S)
     ensure_group(redis)  # the worker consumes this stream; the group must exist before the job is added
-    redis.xadd("jobs", {"incident_id": state["id"]}, maxlen=JOBS_MAXLEN, approximate=True)
+    redis.xadd(STREAM, {"incident_id": state["id"]}, maxlen=JOBS_MAXLEN, approximate=True)
     if idempotency_key:
         redis.set(f"idem:{idempotency_key}", json.dumps({"incident_id": state["id"], "hash": body_hash}), ex=IDEM_TTL_S, nx=True)
     return _created(state)

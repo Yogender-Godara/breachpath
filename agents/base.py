@@ -30,6 +30,8 @@ MAX_TOOL_RESULT_CHARS = 6000  # token budget
 def short_reason(reason):
     """A short, readable label for why an LLM step fell back (shown in the UI and the report line): 'rate limit', 'provider timeout'..."""
     r = (reason or "").lower()
+    if r.startswith("fact check failed"):
+        return reason  # the Reporter's own label, already cut to length; its problem text must not be matched against the words below
     if "ratelimit" in r or "rate limit" in r or "429" in r:
         return "rate limit"
     if "no llm provider configured" in r:

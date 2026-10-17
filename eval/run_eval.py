@@ -213,7 +213,9 @@ def markdown(doc):
     table = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     table += ["| " + " | ".join(str(r[c]).replace("|", "/") for c in cols) + " |" for r in doc["table"]]
     models = "; ".join(sorted(meta["models"])) or "none"
-    return (f"# BreachPath evaluation\n\nRun {meta['date']} · commit {meta['commit']} · models: {models}\n\n" + "\n".join(table)
+    runs = meta.get("method_runs") or {}
+    per_method = ("Each method was run at: " + "; ".join(f"{LABELS[m]}: {' and '.join(runs[m])}" for m in meta["methods"] if m in runs) + ".\n\n") if runs else ""
+    return (f"# BreachPath evaluation\n\nRun {meta['date']} · commit {meta['commit']} · models: {models}\n\n{per_method}" + "\n".join(table)
             + "\n\ngap = cut size − brute-force optimum (0 = perfect, – = no optimum); residual = max flow left after the cut (0 = blocked); "
               "broken = business needs that lose their path; collateral = (other user, resource) pairs that lose access, w = weighted "
               "(recent 3, stale 1); jewels = blast-radius recall; R / P = path recall@20 / precision (– = nothing to measure); "
@@ -245,9 +247,23 @@ def models_of(rows):
     return {f"{agent}: {pm}" if agent != "baseline" else f"B-LLM-JSON: {pm}" for r in rows for agent, pm in (r.get("models") or {}).items()}
 
 
+def now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def method_runs(rows, methods):
+    """{method: ["commit X at DATE", ...]}: when and at which commit the saved cells of each method were run (a merged file mixes runs)."""
+    out = {}
+    for m in methods:
+        runs = sorted({(r.get("run_at") or "unknown time", r.get("commit") or "unknown") for r in rows if r["method"] == m})
+        if runs:
+            out[m] = [f"commit {commit} at {at}" for at, commit in runs]
+    return out
+
+
 def document(rows, scenarios, methods, keys, pause):
-    meta = {"date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "commit": git_commit(), "scenarios": scenarios, "methods": methods,
-            "models": sorted(models_of(rows)), "pause_s": pause}
+    meta = {"date": now(), "commit": git_commit(), "scenarios": scenarios, "methods": methods,
+            "models": sorted(models_of(rows)), "pause_s": pause, "method_runs": method_runs(rows, methods)}
     doc = {"meta": meta, "rows": rows, "table": build_table(rows, scenarios, methods), "summary": summarize(rows, scenarios, methods, keys)}
     doc["markdown"] = markdown(doc)
     return doc
@@ -290,7 +306,11 @@ def main(argv=None):
 
     old = []
     if not args.fresh and (RESULTS / "latest.json").exists():
-        old = json.loads((RESULTS / "latest.json").read_text(encoding="utf-8"))["rows"]
+        saved = json.loads((RESULTS / "latest.json").read_text(encoding="utf-8"))
+        old = saved["rows"]
+        for r in old:  # a cell saved before cells were stamped: the file's own date and commit are all that is known
+            r.setdefault("commit", saved["meta"]["commit"])
+            r.setdefault("run_at", saved["meta"]["date"])
     rows = {(r["scenario"], r["method"]): r for r in old}
     truths = {sid: load_truth(sid) for sid in SCENARIOS}
     keys = {sid: t["key"] for sid, t in truths.items()}
@@ -307,6 +327,7 @@ def main(argv=None):
                 except Exception as e:  # one failing cell never loses the others
                     row = {"scenario": sid, "method": method, "provider": None, "models": {}, "latency_ms": 0, "tokens_in": 0, "tokens_out": 0, "degraded": False,
                            "status": "failed", "ran": False, "note": f"ERROR {type(e).__name__}: {str(e)[:200]}"}
+                row.update(commit=git_commit(), run_at=now())
                 rows[(sid, method)] = row
                 print(cell(row)[:110], f"[{row['latency_ms']} ms]")
                 save(document(list(rows.values()), SCENARIOS, METHODS, keys, args.pause))  # after every cell: nothing is lost
