@@ -35,6 +35,32 @@ Acme Retail (synthetic data). Developer `user:ravi`'s access key is found in a p
 
 ![S8 fix and proof](docs/screenshots/s8_fix_and_proof.png)
 
+### Agent mode (real runs, Groq `openai/gpt-oss-120b`)
+
+**S2: the live timeline.** Every step of the incident as it happens: the orchestrator picks up the job, then the Investigator chooses its tools (`get_blast_radius`, `find_attack_paths`) turn by turn, with latency and tokens per step. It ends with 2 crown jewels found by the code BFS and 2 valid paths, and the status `DONE`.
+
+![S2 agent timeline](docs/screenshots/s2_agent_timeline.png)
+
+**S2: the report.** Written by the LLM, with every fact checked in code: the summary, what was at risk, the two attack paths and the fix (`e:s2:05` and `e:s2:10`, a host action).
+
+![S2 report](docs/screenshots/s2_report.png)
+
+**S8: the attack graph.** The single path from `user:max` to `db:s8-reports`.
+
+![S8 attack graph](docs/screenshots/s8_attack_graph.png)
+
+**S8: the timeline.** The Investigator finds 1 jewel and 1 path, then the Executor prepares the sandbox with 46 business edges protected.
+
+![S8 agent timeline](docs/screenshots/s8_agent_timeline.png)
+
+**S8: the report.** The fix edits the role's trust policy (`e:s8:05`, unused for 300 days) and the report states why it beats the alternative cut `e:s8:07`: collateral 12 against 0.
+
+![S8 report](docs/screenshots/s8_report.png)
+
+**The evaluation tab.** BreachPath (fast and agent) against the four baselines on all 8 scenarios, with the summary underneath.
+
+![Evaluation tab](docs/screenshots/s2_eval.png)
+
 ## Architecture
 
 ```mermaid
