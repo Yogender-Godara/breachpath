@@ -39,9 +39,14 @@ flowchart LR
     end
 
     subgraph App["BreachPath services (Python)"]
-        API["API service<br/>(FastAPI, stateless)<br/>runs fast mode in-process"]
-        subgraph WK["Worker service (stateless)"]
-            W["run_incident pipeline<br/>Orchestrator + 3 LLM agents<br/>+ 2 code workers"]
+        subgraph API["API service (FastAPI, stateless): the UI talks only to this"]
+            FASTP["run_incident('fast')<br/>in the request, no LLM, no MCP"]
+            ENQ["agent mode: enqueue job,<br/>read state and events"]
+        end
+        subgraph WK["Worker service (stateless, agent mode)"]
+            W["run_incident('agent')<br/>Orchestrator + code steps:<br/>prepare, Executor, Verifier"]
+            LOOP["agent loop with tools<br/>Investigator, Planner"]
+            REP["Reporter<br/>one chat call, no tools<br/>+ code fact guard"]
             MCP["BreachPath MCP server<br/>(stdio subprocess)"]
         end
         CORE["breachpath core library<br/>graph tools + guards<br/>(imported by API, worker, MCP)"]
@@ -53,16 +58,21 @@ flowchart LR
         Q[["jobs stream<br/>incident state + events"]]
     end
 
-    LLM["LLM gateway (OpenAI-compatible)<br/>Groq → OpenRouter → Mistral"]
+    LLM["LLM gateway (OpenAI-compatible)<br/>Groq → OpenRouter"]
 
     UI -- "REST (start, poll events)" --> API
-    API -- "enqueue job / read state" --> Q
-    W -- "consume job / write events" --> Q
-    W -- "LLM calls (tool use)" --> LLM
-    W -- "MCP tool calls (stdio)" --> MCP
-    EXT -. "own stdio copy on a laptop" .-> CORE
+    ENQ -- "enqueue job / read state" --> Q
+    Q -- "consume job / write events" --> W
+    FASTP --> CORE
+    W -- "code steps" --> CORE
+    W -- "LLM steps" --> LOOP
+    W -- "report step" --> REP
+    REP -- "incident facts" --> LLM
+    LOOP -- "prompt + tool results" --> LLM
+    LLM -- "chooses tool calls" --> LOOP
+    LOOP -- "executes the chosen tools (stdio)" --> MCP
+    EXT -. "own stdio copy on a laptop" .-> MCP
     MCP --> CORE
-    API -- "fast mode: run_incident(fast)" --> CORE
     CORE -- "Cypher + algo.*" --> G1
     CORE -- "Cypher + algo.*" --> G2
 ```
@@ -70,7 +80,7 @@ flowchart LR
 **Why this shape:**
 - The **API stays fast**: it only enqueues jobs and reads state, and never waits on an LLM.
 - **Workers do the slow work** (LLM loops) and can be scaled out.
-- **All graph access goes through one `core` library**, which gives one place for guards, timeouts, query logic and metrics. The **MCP server is a thin wrapper** over it. The worker starts the MCP server as a **stdio subprocess**, so LLM agents really choose and call tools through MCP (Track 1), with **no extra container and no network listener**. Fast mode calls the library directly. External MCP clients run the same server over stdio on their own machine.
+- **All graph access goes through one `core` library**, which gives one place for guards, timeouts, query logic and metrics. The **MCP server is a thin wrapper** over it. For each Investigator and Planner step the worker starts the MCP server as a **stdio subprocess**, so LLM agents really choose and call tools through MCP (Track 1), with **no extra container and no network listener**. Fast mode calls the library directly. In agent mode the **LLM chooses each tool call** (Investigator and Planner; the Reporter uses no tools), the agent loop in the worker executes it through the MCP server and returns the result to the LLM; the MCP server never calls the LLM itself. External MCP clients run the same server over stdio on their own machine.
 - **One pipeline, two modes:** `run_incident(mode)` is the only orchestration code. Fast mode runs it synchronously in the API with code-only planning. Agent mode runs it in the worker with LLM agents. Nothing is written twice.
 - **FalkorDB runs on Redis**, so the same instance also holds the job queue (Redis Streams) and incident state. That means **no extra database**.
 
@@ -82,7 +92,7 @@ flowchart LR
 |---|---|---|---|---|
 | C1 | **UI** | Start an incident, show live agent timeline, path graph, fix, proof, eval table | Streamlit + graph view component | none |
 | C2 | **API service** | REST endpoints, validation, idempotency, enqueue jobs, serve state and events, fast mode | FastAPI + Uvicorn | none |
-| C3 | **Worker service** | Runs `run_incident(agent)`: Orchestrator state machine, the 3 LLM agents and the 2 code workers, checkpoints after each step. Starts the MCP server as a stdio subprocess. | Python, `openai` SDK (OpenAI-compatible providers), MCP client (stdio) | none (checkpoint in Redis) |
+| C3 | **Worker service** | Runs `run_incident(agent)`: Orchestrator state machine, the 3 LLM agents and the 2 code workers, checkpoints after each step. Starts the MCP server as a stdio subprocess for each Investigator and Planner step (the Reporter uses no tools). | Python, `openai` SDK (OpenAI-compatible providers), MCP client (stdio) | none (checkpoint in Redis) |
 | C4 | **MCP server** | Thin MCP wrapper over `core` tools. **No container, no port.** Started by the worker over stdio, or by an external MCP client on a laptop. | Python MCP SDK 2.x (`MCPServer`, stdio transport) (verified P1.5: `mcp.server.mcpserver.MCPServer`, stdio) | none |
 | C4b | **`core` library** | Graph tools (paths, min-cut, simulate, sandbox, verify), guards, timeouts, and the single `run_incident(mode)` pipeline | Python package imported by API, worker and MCP | none |
 | C5 | **FalkorDB** | Baseline graph, sandbox graphs, algorithms, job stream, incident state, events | `falkordb/falkordb` Docker image (verified: FalkorDB 6.0.2 has `algo.maxFlow`, see `docs/VERIFY_RESULTS.md`) | **all state** |
@@ -315,7 +325,7 @@ flowchart TB
     API --> DB
     WK --> DB
     DB --- VOL
-    WK --> LLMs[("LLM providers<br/>Groq / OpenRouter / Mistral")]
+    WK --> LLMs[("LLM providers<br/>Groq / OpenRouter")]
 ```
 
 | Environment | Setup |

@@ -53,7 +53,7 @@ breachpath/
 │   ├── main.py                 # FastAPI app
 │   └── routes/                 # scenarios, analyze, incidents, eval, health
 ├── worker/
-│   └── main.py                 # consumer loop, starts MCP stdio subprocess, janitor
+│   └── main.py                 # consumer loop, janitor (the MCP stdio subprocess is started per agent step by agents/base.py)
 ├── ui/
 │   └── app.py                  # Streamlit
 ├── eval/

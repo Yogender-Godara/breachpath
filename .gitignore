@@ -21,3 +21,6 @@ eval/results/*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local build tracker (not published)
+task.md

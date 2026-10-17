@@ -39,33 +39,42 @@ Acme Retail (synthetic data). Developer `user:ravi`'s access key is found in a p
 
 ```mermaid
 flowchart LR
-    subgraph Client
-        UI["UI (Streamlit)<br/>the only public port"]
-        EXT["External MCP client<br/>(Claude Desktop / Code)<br/>optional, own stdio copy"]
-    end
-    subgraph Stack["docker compose: 4 containers"]
-        API["api (FastAPI)<br/>fast mode runs in-process"]
-        subgraph WK["worker"]
-            PIPE["run_incident pipeline<br/>Orchestrator + 3 LLM agents + 2 code workers"]
+    UI["UI (Streamlit)<br/>the only public port"]
+    LLM["LLM providers (OpenAI-compatible)<br/>Groq → OpenRouter"]
+    subgraph Stack["docker compose: 4 containers (ui, api, worker, falkordb)"]
+        subgraph API["api (FastAPI): the UI talks only to this"]
+            FASTP["fast mode: run_incident('fast')<br/>in the request, no LLM, no MCP"]
+            ENQ["agent mode: enqueue the job,<br/>read state and events"]
+        end
+        subgraph WK["worker (agent mode)"]
+            PIPE["run_incident('agent')<br/>Orchestrator + code steps:<br/>prepare, Executor, Verifier"]
+            LOOP["agent loop with tools<br/>Investigator, Planner"]
+            REP["Reporter<br/>one chat call, no tools<br/>+ code fact guard"]
             MCP["MCP server<br/>(stdio subprocess)"]
         end
         CORE["core library<br/>graph tools, guards, min-cut"]
         FDB[("falkordb<br/>baseline + sandbox graphs<br/>jobs stream, incident state, events")]
     end
-    LLM["LLM providers (OpenAI-compatible)<br/>Groq → OpenRouter"]
 
     UI -- REST --> API
-    API -- "enqueue / read state" --> FDB
-    PIPE -- "consume job, events" --> FDB
-    PIPE -- "tool calls" --> MCP
-    PIPE -- "LLM calls" --> LLM
+    FASTP --> CORE
+    ENQ -- "enqueue / read" --> FDB
+    FDB -- "job" --> PIPE
+    PIPE -- "state, events" --> FDB
+    PIPE -- "code steps" --> CORE
+    PIPE -- "LLM steps" --> LOOP
+    PIPE -- "report step" --> REP
+    LOOP -- "prompt + tool results" --> LLM
+    LLM -- "chooses tool calls" --> LOOP
+    LOOP -- "executes the chosen tools" --> MCP
+    REP -- "incident facts" --> LLM
     MCP --> CORE
-    API -- "fast mode" --> CORE
-    EXT -.-> CORE
     CORE -- "Cypher + algo.*" --> FDB
 ```
 
 **3 LLM agents (Investigator, Planner, Reporter) + 2 code workers (Executor, Verifier) + an Orchestrator.** The Executor and Verifier are plain code on purpose: the steps that *change* things and *judge* things must be deterministic.
+
+**Two modes.** *Fast mode* runs in the API process with no LLM and no MCP: code brains call `core` directly. *Agent mode* runs in the worker. For the **Investigator and the Planner**, the agent loop sends the prompt and the allow-listed tools to the LLM, the **LLM chooses which tool to call**, the loop executes that call through the MCP server (which only wraps `core`) and returns the result to the LLM, until the agent submits its answer. The **Reporter** uses no tools: one chat call over the incident facts, then the code fact guard checks the text. The MCP server never talks to the LLM itself. The code steps (prepare the sandbox, Executor, Verifier) call `core` directly in both modes.
 
 One pipeline, `core/pipeline.py: run_incident(mode)`, runs both modes. It saves the incident state after every step, so a restarted worker resumes where it stopped.
 
@@ -165,6 +174,35 @@ The data is **synthetic** and made by a seeded generator (`data/generator.py`): 
 | S7 | an 8-hop path beyond the 6-hop listing bound | completeness |
 | S8 | two equal-size cuts, one breaks 12 stale analysts | the collateral choice |
 
+## Scenario file format (bring your own graph)
+
+The UI and the API offer only the 8 built-in scenarios; there is **no upload yet**. A scenario is one YAML file in `data/scenarios/` (see `s2.yaml`); `python -m data.scenarios --all` merges it with the seeded background company and writes `data/generated/<id>.json` plus the answer key. `core/graph/loader.py` loads that JSON into FalkorDB and checks the counts.
+
+| Key | What it holds |
+|---|---|
+| `id`, `title` | scenario id (`s2`) and a one-line description |
+| `src` | the compromised identity, e.g. `user:ravi` |
+| `nodes` | `{id, label, name, ...}`; `label` is one of User, Group, Role, Policy, Server, Database, Secret; a Database may set `crown_jewel: true` and `sensitivity` |
+| `edges` | `{eid, type, src, dst, last_used_days}`; `type` is one of the 8 kinds (stored as `kind`); optional `technique`; at most one edge per (src, dst) pair |
+| `needs` | business needs `{id, principal_id, resource_id, reason, source, valid}`; usage-based needs are added by the generator |
+| `expect` (in the JSON) | the answer key: path count, jewels, min-cut size, `safe` |
+
+`cap = 1` and `w = 1` are set by the loader, never written in the file. A scenario with no `crown_jewel: true` database has nothing to attack, so its result is meaningless.
+
+Example, one edge of S2: `{eid: "e:s2:05", type: HAS_POLICY, src: role:s2-deploy-role, dst: policy:s2-lambda-admin, last_used_days: 210}`.
+
+## Code tour (read in this order)
+
+1. `core/graph/schema.py`: graph names, the one edge type, the constants.
+2. `core/graph/queries.py`: every Cypher query (`MAX_FLOW`, `ATTACK_PATHS`, `REACH_BFS`, ...).
+3. `core/graph/mincut.py`: `algo.maxFlow`, the residual BFS and the cut with its sanity assert.
+4. `core/tools/write.py` and `core/tools/guards.py`: sandbox, simulation, apply, and the four write guards.
+5. `core/tools/verify.py`: the proof (max flow 0, BFS, needs ok).
+6. `core/pipeline.py`: `run_incident`, the one pipeline for both modes. With `orchestrator/state_machine.py`.
+7. `agents/base.py`: the agent loop where the LLM chooses tools and MCP runs them. Then `agents/planner.py` and `agents/reporter.py`.
+8. `mcp_server/server.py`: the 17 tools.
+9. `eval/run_eval.py` and `eval/results/latest.md`: the evaluation.
+
 ## Cypher queries and graph algorithms used
 
 All Cypher is in `core/graph/queries.py`, always parameterized. Edge type, hop bounds and BFS depth are constants written into the strings once, never from user input. The 4 indexes are in `core/graph/schema.py`.
@@ -211,7 +249,7 @@ The MCP server (`mcp_server/server.py`) is a thin wrapper over the `core` librar
 - **10 read tools (profile `readonly`):** `get_blast_radius`, `find_attack_paths`, `shortest_paths`, `edge_path_frequency`, `choke_points`, `compute_min_cut`, `check_business_access`, `get_node`, `get_edge`, `verify_fix`.
 - **7 more in the `full` profile:** `run_readonly_cypher`, `simulate_cut`, `create_sandbox`, `protect_business_paths`, `delete_sandbox`, `apply_fix`, `split_suggestion`.
 
-**stdio only.** There is no MCP container and no port. The worker starts `python -m mcp_server.server` as a subprocess for each LLM agent step. Each agent sees only its allow-listed tools: the Investigator reads, the Planner reads and simulates, the Executor and Verifier are code.
+**stdio only.** There is no MCP container and no port. The worker starts `python -m mcp_server.server` as a subprocess for each Investigator and Planner step (the Reporter uses no tools). Each agent sees only its allow-listed tools: the Investigator reads, the Planner reads and simulates, the Executor and Verifier are code.
 
 **Write guards** (`core/tools/guards.py`, run before every write tool; all must pass):
 
@@ -222,24 +260,7 @@ The MCP server (`mcp_server/server.py`) is a thin wrapper over the `core` librar
 
 Errors come back as `{"ok": false, "error": {"code", ...}}` (`BAD_INPUT`, `GUARD_REFUSED`, `LIMIT_EXCEEDED`, …), so the model can read them and adjust.
 
-**Use the read-only tools from Claude Desktop / Claude Code.** The server must reach FalkorDB, so start the stack with the local dev override (it publishes FalkorDB on `127.0.0.1:6379` only):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-pip install -r requirements.txt      # Python 3.12, in a virtual environment
-claude mcp add breachpath -e MCP_PROFILE=readonly -e FALKORDB_HOST=127.0.0.1 -e FALKORDB_PORT=6379 \
-  -e FALKORDB_PASSWORD=<your FALKORDB_PASSWORD> -- python -m mcp_server.server
-```
-
-For Claude Desktop, put the same command in `claude_desktop_config.json`:
-
-```json
-{"mcpServers": {"breachpath": {"command": "python", "args": ["-m", "mcp_server.server"],
-  "env": {"PYTHONPATH": "/path/to/breachpath", "MCP_PROFILE": "readonly", "FALKORDB_HOST": "127.0.0.1",
-          "FALKORDB_PORT": "6379", "FALKORDB_PASSWORD": "<your FALKORDB_PASSWORD>"}}}}
-```
-
-The server command is the one the tests start (`tests/test_mcp_server.py`). These two client configurations have not been verified yet in the real Claude apps. Load a scenario first (see Setup), then ask the client, for example, for the blast radius of `user:ravi` in graph `t:s2:baseline`.
+The server command is the one the tests start (`tests/test_mcp_server.py`). Nothing else listens: it is not exposed to any outside client in this setup.
 
 ## Features
 
@@ -334,7 +355,7 @@ NFR-L4 is not met with real free-tier LLM calls (one fresh run, 105 s, with rate
 - **Agent mode needs a demo token**, is rate-limited per IP (10 requests per minute, `RATE_LIMIT_PER_MIN`), and allows at most 2 active agent incidents. Fast mode is open (no LLM) but rate-limited per IP too: 60 requests per minute (`ANALYZE_RATE_LIMIT_PER_MIN`). The two limits have separate counters, and the UI shows "Too many requests: wait a minute and try again." when one is hit.
 - **No secrets in logs:** after one fast and one agent incident, `gsk_`, `sk-or-` and the demo token had 0 hits in the logs of all 4 services. Secrets live only in the git-ignored `.env`.
 
-**Not in scope:** user login or OAuth, mTLS between containers, penetration testing, a WAF. Behind the UI all visitors share the UI container's IP, so both rate limits are shared by everybody (at most 60 fast runs and 10 agent runs a minute in total): raise `ANALYZE_RATE_LIMIT_PER_MIN` and `RATE_LIMIT_PER_MIN` for a public demo.
+**Not in scope:** user login or OAuth, mTLS between containers, penetration testing, a WAF. Behind the UI all visitors share the UI container's IP, so both rate limits are shared by everybody (at most 60 fast runs and 10 agent runs a minute in total). This project is run locally (see Setup); it is not deployed publicly.
 
 ## Limitations
 
@@ -450,8 +471,12 @@ Design docs:
 - [Problems, blockers and risks](docs/05_Problems_Blockers_Risks.md)
 - [Agent prompts and schemas](docs/06_Agent_Prompts_and_Schemas.md)
 - [Verification results](docs/VERIFY_RESULTS.md)
-- [Docs index](docs/README.md) and the build tracker [task.md](task.md)
+- [Docs index](docs/README.md)
 
 ## AI usage
 
 _To be written by the author before submission._
+
+## License
+
+MIT, see [LICENSE](LICENSE).
