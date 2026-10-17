@@ -475,7 +475,7 @@ Design docs:
 
 ## AI usage
 
-_To be written by the author before submission._
+I built BreachPath with the help of Claude Code, which I used as a pair programmer to improve the code and refine the documentation and README. I took responsibility for the overall design and architecture, including designing the graph schema and writing and refining the Cypher queries. I personally reviewed the implementation at all eight checkpoints (①–⑧), tested the system, ran the live demos, and managed all commits. I understand how the graph model represents relationships, how the queries explore connections, and how the min-cut (max-flow) identifies the smallest set of connections to remove to disconnect parts of the graph. Inside BreachPath, the Investigator, Planner, and Reporter use Groq's(OpenRouter as fallback) `openai/gpt-oss-120b` model. The LLM helps choose between options that the code has already verified, while the safety checks and supporting evidence rely on deterministic code and FalkorDB. I take responsibility for the final implementation and can explain the reasoning behind the technical decisions.
 
 ## License
 
