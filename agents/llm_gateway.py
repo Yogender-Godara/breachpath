@@ -26,9 +26,10 @@ AGENTS = ("investigator", "planner", "reporter", "baseline")
 MODEL_OF = {"baseline": "planner"}  # the JSON-only eval baseline uses the Planner's model (a fair comparison, docs/06 section 6)
 DEFAULT_URLS = {"openrouter": "https://openrouter.ai/api/v1", "groq": "https://api.groq.com/openai/v1"}
 # source: VERIFY_RESULTS P1.4. An unknown provider gets all False: the safe default.
-CAPS = {"openrouter": {"forced_tool_choice": True, "parallel": True, "json_mode": True},
-        "groq": {"forced_tool_choice": True, "parallel": False, "json_mode": True}}
-NO_CAPS = {"forced_tool_choice": False, "parallel": False, "json_mode": False}
+CAPS = {"openrouter": {"forced_tool_choice": True, "parallel": True, "json_mode": True, "reasoning_effort": False},
+        "groq": {"forced_tool_choice": True, "parallel": False, "json_mode": True, "reasoning_effort": True}}  # reasoning_effort: P9.7 probe
+NO_CAPS = {"forced_tool_choice": False, "parallel": False, "json_mode": False, "reasoning_effort": False}
+REASONING_AGENTS = ("investigator", "planner")  # the Reporter's prose is never sent a reasoning setting
 HEADERS = {"openrouter": {"X-Title": "BreachPath"}}  # groups our calls in OpenRouter's Activity log
 RETRY_BACKOFF_S = 1.5  # the pause before the one retry of a transient error
 
@@ -86,9 +87,10 @@ def _client(provider, base_url, api_key):
 
 # --- cache ---
 
-def cache_key(provider, model, messages, tools, tool_choice, temperature, response_format):
-    """Stable for the same request. messages and tools must be plain JSON data (dicts, lists, strings)."""
-    request = [provider, model, messages, tools, tool_choice, temperature, response_format]
+def cache_key(provider, model, messages, tools, tool_choice, temperature, response_format, extra_body=None):
+    """Stable for the same request. messages and tools must be plain JSON data (dicts, lists, strings).
+    extra_body (e.g. reasoning_effort) is part of the key ONLY when it is sent, so every key made without it stays the same."""
+    request = [provider, model, messages, tools, tool_choice, temperature, response_format] + ([extra_body] if extra_body else [])
     return "llmcache:" + hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
 
 
@@ -165,8 +167,11 @@ def chat(agent, provider, messages, tools=None, tool_choice="auto", temperature=
     if response_format and not flags["json_mode"]:
         response_format = None
 
+    effort = config.LLM_REASONING_EFFORT
+    extra = {"reasoning_effort": effort} if effort and agent in REASONING_AGENTS and flags.get("reasoning_effort") else None
+
     started = time.perf_counter()
-    ckey = cache_key(provider, model, messages, tools, tool_choice, temperature, response_format) if config.LLM_CACHE else None
+    ckey = cache_key(provider, model, messages, tools, tool_choice, temperature, response_format, extra) if config.LLM_CACHE else None
     data = _cache_get(ckey) if ckey else None
     cached = data is not None
     if not cached:
@@ -175,6 +180,8 @@ def chat(agent, provider, messages, tools=None, tool_choice="auto", temperature=
             request.update(tools=tools, tool_choice=tool_choice)
         if response_format:
             request["response_format"] = response_format
+        if extra:
+            request["extra_body"] = extra
         data = _create(_client(provider, url, key), request).model_dump(mode="json", warnings=False)
         message = data["choices"][0]["message"]
         if ckey and (message.get("content") or message.get("tool_calls")):  # an EMPTY answer (a reasoning model out of tokens) is not cached

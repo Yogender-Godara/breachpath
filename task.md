@@ -26,9 +26,9 @@
 | P6 MCP server and agents (agent mode) | Day 2 | 🟨 | 17 / 20 |
 | P7 Reporter and UI | Day 3 | 🟨 | 16 / 18 |
 | P8 Evaluation | Day 3 | 🟨 | 7 / 9 |
-| P9 Hardening and deploy | Day 3 | 🟨 | 23 / 28 |
+| P9 Hardening and deploy | Day 3 | 🟨 | 31 / 34 |
 | P10 Submission | Day 4 | 🟨 | 7 / 14 |
-| **Total** | | | **189 / 226** |
+| **Total** | | | **197 / 232** |
 
 **Now working on:** P10.2 your parts: AI usage, video, blog; P10.3 submit
 **Day gates:** Day 1 ⬜ · Day 2 ⬜ · Day 3 ⬜ · Day 4 ⬜ (see [05 §5](docs/05_Problems_Blockers_Risks.md))
@@ -468,25 +468,35 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 **Done when:** the numbers are recorded (whatever they are). ✅
 
-### P9.5 Demo-safety fixes 🟨 🤖
+### P9.5 Demo-safety fixes ✅ 🤖
 - [x] Step 1: `/analyze` has its own limit `ANALYZE_RATE_LIMIT_PER_MIN` (60); agent mode keeps `RATE_LIMIT_PER_MIN` (10); the UI says "Too many requests: wait a minute and try again."; tests + LLD + README
 - [x] Step 2: the tests use their own job stream (`JOBS_STREAM=jobs:test`), proven with the worker running; README line removed
 - [x] Step 3: a fresh clone passes its tests: `data.scenarios.generate()` + a session fixture; proven with `data/generated` moved away
 - [x] Step 4: docs match the code (`/readyz`, the 3 stale `[VERIFY]` tags in the HLD)
-- [ ] Step 5: the live tests re-run once after P9 (found and fixed one regression, the S2 instruction test; 4 live tests have a pytest verdict, the rest only printed output: see the reply)
+- [x] Step 5: the live tests re-run once after P9 (found and fixed one regression, the S2 instruction test). Closed in P9.7: all 7 live files re-run one at a time, each with a green pytest summary (gateway 2, agent_base 2, investigator 3, planner 2, reporter 2, instructions 2, worker 2 passed); they pass on saved real answers from the cache, see [VERIFY_RESULTS](docs/VERIFY_RESULTS.md) P9.7
 - [x] Step 6: full suite, `check_fast_mode` 8/8 and `tests/test_readme.py` shown
 
-**Done when:** all six are shown with real output. (Step 5 is open: the first full live run was cut short and has no pytest summary.)
+**Done when:** all six are shown with real output. ✅ (Step 5 closed by P9.7.)
 
-### P9.6 Quality and efficiency 🟨 🤖
+### P9.6 Quality and efficiency ✅ 🤖
 - [x] Step 1: the Reporter repairs a good report after the failed retry (missing "why the chosen cut beats the alternative" sentence, missing operator-instruction sentence; anything else = template); the degraded reason says why (`fact check failed twice: <first problem, 80 chars>`); 8 new tests; replayed on 4 saved incidents (S2, S8, with and without an instruction); the repair also applied offline to the 4 real cached model answers: [VERIFY_RESULTS](docs/VERIFY_RESULTS.md) P9.6
-- [ ] Step 2 (optional) SKIPPED: `reasoning_effort` for Groq's gpt-oss. Not even the one probe call was made: the budget of 12 real LLM calls was used by Steps 1 and 4 (11 counted calls), and the step needs a probe plus 2 fresh runs
+- [x] Step 2 (optional): `reasoning_effort` for Groq's gpt-oss. Skipped in P9.6 (no budget), done in P9.7: the probe was accepted and the code exists (default off), but the measurement did not meet the rule (Planner in+out −1%, Investigator +30%): NOT enabled
 - [x] Step 3: free eval columns (fast, disable, betweenness, frequency) re-run on all 8 scenarios: same numbers; `latest.md` lists the commit and time per method; README updated. The agent column was NOT refreshed (no LLM budget left) and the README says it was run at the older commit 55daa16
 - [x] Step 4: S7 Investigator, one fresh run (cache off, Groq, 3 calls): `llm_jewels` = [], `code_jewels` = ['db:s7-billing'], notes "LLM missed: db:s7-billing"; README wording now names this run (2026-10-17)
 - [x] Step 5 (optional): api, worker and ui run as uid 10001 (`Dockerfile`), the toolbox keeps root (`user: root` in the dev file); rebuilt, 4/4 healthy in about 40 s, one cached agent incident DONE through the worker (0 real calls)
 - [x] Step 6: `pytest -q -m "not live"` 656 passed, `check_fast_mode` 8/8, `tests/test_readme.py` 11 passed
 
-**Done when:** every step that was run is shown with real output (Step 2 skipped, with the reason). ✅ for the steps run
+**Done when:** every step that was run is shown with real output. ✅
+
+### P9.7 Close the two open items ✅ 🤖
+- [x] A1: probe, one real Groq call with `reasoning_effort="low"`: accepted (577 ms, 78/18 tokens), 999 of 1000 requests left that day
+- [x] A2: `LLM_REASONING_EFFORT` (default empty), `CAPS`, Investigator and Planner only, cache key only when sent; 5 unit tests
+- [x] A3: 2 fresh runs with `low` (S8 Planner, S2 Investigator): same accepted results, tokens not down by 30% → not enabled; numbers in VERIFY_RESULTS
+- [x] B: the 7 live test files one at a time, all green (see P9.5 Step 5)
+- [x] C: the 5 demo runs (S2, S8, S8 + legacy-role instruction, S5, S3) replayed through the API and worker: all from the cache, 0 real calls
+- [x] D: `pytest -q -m "not live"` 661 passed, `check_fast_mode` 8/8, `tests/test_readme.py` 11 passed. Real calls in the task: 12 successful (+1 Groq 429, +2 Groq 400)
+
+**Done when:** A is decided with numbers and B is shown file by file. ✅
 
 ### P9.4 Free deployment (optional) ⬜ 🤖 + 👤
 - [ ] Shortlist free platforms. Check **private networking** (only the UI public) and the current free-tier limits.
@@ -536,6 +546,7 @@ Script: `spikes/verify_falkordb.py`. One toy graph per check, results written to
 
 | Date / time | Decision | Old → New | Why | Docs updated? |
 |---|---|---|---|---|
+| Oct 17 | `reasoning_effort` for Groq (P9.7) | not sent at all → `LLM_REASONING_EFFORT` (default empty = not sent); with a value it is sent as `extra_body` to a provider whose `CAPS` allow it (Groq), for the Investigator and the Planner only, and is part of the cache key only when sent. **Measured and NOT enabled** | Probe accepted. With `low`: S8 Planner in+out 7164 → 7089 (−1%), S2 Investigator 4785 → 6221 (+30%, one extra turn), same accepted results. The saving is in the output, the input (the growing conversation) dominates. So the demo cache needs no re-warming | Yes (LLD §12, env.example) |
 | Oct 17 | Reporter repairs a missing sentence (P9.6) | after the retry a report that still failed the guard was always replaced by the template (only the "collateral claim without data" case was repaired) → `reporter._repair` also writes, from the state, (a) one sentence per alternative the Fix section left out (eids, collateral count and weighted, size, stale days) and (b) one sentence about the operator instruction (from `plan.instruction`, `plan.avoid`, `plan.default_fix`), but ONLY when every remaining problem is one of these (or the old collateral one); then `check()` runs again and must pass, else the template. Event `report`: `source: llm+repaired` + `repairs` list | The live logs show the common failure is a missing sentence the code can write; an invented id, a pronoun or a wrong "verified" still means the template. Honest note: in the 4-incident replay the retry fixed every case by itself, so the repair did not fire live; it was proven by 8 unit tests and offline on the 4 real cached first answers | Yes (LLD §6.2, README) |
 | Oct 17 | Degraded reason of the Reporter (P9.6) | `reporter: fact check failed twice` → `reporter: fact check failed twice: <first problem, max 80 chars>` (`short_reason` returns that label unchanged) | The UI and the report's degraded line showed THAT the template was used, not WHY | Yes (LLD §6.2) |
 | Oct 17 | Eval: when each method was run (P9.6) | one date and commit for the whole file → every row is stamped (`commit`, `run_at`); rows saved before get the file's own date and commit; `meta.method_runs` and a line "Each method was run at: ..." in `latest.md`. The 4 free methods were re-run (same numbers); the agent and B-LLM-JSON columns stay from 55daa16 | A merged results file mixes runs; the agent column is older than the code and must say so | Yes (README Evaluation) |

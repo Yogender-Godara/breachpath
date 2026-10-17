@@ -25,6 +25,8 @@ LLM_MAX_TOKENS_BASELINE = int(os.getenv("LLM_MAX_TOKENS_BASELINE", "4000"))  # d
 LLM_MAX_TOKENS_REPORTER = int(os.getenv("LLM_MAX_TOKENS_REPORTER", "2500"))  # docs/06 section 6: the report is longer than a tool plan
 LLM_MAX_WAIT_S = float(os.getenv("LLM_MAX_WAIT_S", "20"))  # the longest we wait for a 429's retry-after
 LLM_MAX_CALLS_PER_INCIDENT = int(os.getenv("LLM_MAX_CALLS_PER_INCIDENT", "20"))  # all agents and provider restarts of one incident
+# Groq gpt-oss only ("low" | "medium" | "high"), sent for the Investigator and the Planner, never for the Reporter. "" = not sent.
+LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "").strip().lower()
 LLM_CACHE = os.getenv("LLM_CACHE", "on").strip().lower() in ("on", "true", "1")
 LLM_CACHE_TTL_S = int(os.getenv("LLM_CACHE_TTL_S", str(7 * 24 * 3600)))
 DEMO_TOKEN = os.getenv("DEMO_TOKEN", "")  # empty = agent mode is disabled

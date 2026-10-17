@@ -216,3 +216,40 @@ Because the repair did not run live, it was applied **offline to the 4 real firs
 **Step 4: S7, the Investigator, one fresh run** (`LLM_CACHE=off`, `LLM_MAX_CALLS_PER_INCIDENT=4`, `pytest -s -m live tests/test_investigator.py::test_live_s7_beyond_the_hop_bound_has_no_paths`, no prompt change): incident e9a5dfaf, provider groq (`openai/gpt-oss-120b`), 3 turns, 3 calls, none cached, tokens 2877 in / 208 out, not degraded. Finding event: **`llm_jewels` = [], `code_jewels` = ['db:s7-billing']**, `valid_paths` 0, notes "The compromised identity user:nia cannot reach any crown-jewel databases within 6 hops. LLM missed: db:s7-billing." The model missed the jewel; the code BFS found it.
 
 **Step 5: non-root containers.** `Dockerfile`: `useradd --uid 10001 app`, `COPY --chown=app:app`, `USER app`; `docker-compose.dev.yml`: `toolbox` gets `user: root`. `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` took 22 s (layers cached); 40 s later api, worker, ui and falkordb were all `healthy`. `id -u`: api 10001, worker 10001, ui 10001, falkordb 0 (unchanged). One S2 agent incident through the API and the worker (ed6be824): DONE, not degraded, 7.0 s, 20 of 20 LLM answers from the cache (0 real calls), report source `llm`. No volume and no FalkorDB service line was changed.
+
+## P9.7 `reasoning_effort` on Groq, and the live tests once more (2026-10-17)
+
+**Real-call count (budget rule: stop at 60; the gateway log lines `cached=False`):** probe 1, S8 Planner with effort 5, S2 Investigator with effort 5, live tests of the gateway 1 (OpenRouter, by the test's design) = **12 successful real calls**. Failed requests that also reached a provider: 1 Groq 429 (S2 Investigator run, retried after 7 s) and 2 Groq 400 `tool_use_failed` (`tests/test_instructions_live.py`) = 15 requests in all. Groq's header after the probe: 999 of 1000 requests left today.
+
+**A1 probe (one call, Groq `openai/gpt-oss-120b`, `extra_body={"reasoning_effort": "low"}`, prompt "Reply with the single word: ok"):** **accepted**, answer `ok`, 577 ms, 78 tokens in / 18 out (8 of them reasoning tokens). Headers: `x-ratelimit-limit-requests 1000`, `remaining-requests 999`, `limit-tokens 8000`, `remaining-tokens 7622`, `reset-requests 1m26.4s`, `reset-tokens 2.835s` (there is no per-day token header).
+
+**A2 implemented, default off:** `LLM_REASONING_EFFORT` (`core/config.py`, `env.example` commented example), `CAPS["groq"]["reasoning_effort"] = True`, openrouter and unknown providers False; `llm_gateway.chat` sends it for the Investigator and the Planner only, and `cache_key` includes it only when it is sent (existing keys unchanged). 5 unit tests in `tests/test_llm_gateway.py`.
+
+**A3 measurement** (same two live tests, `LLM_REASONING_EFFORT=low` passed with `docker compose run -e`; "before" = the same tests with the setting off, answered from the cache whose tokens are those of the original fresh runs):
+
+| run | setting | calls | tokens in / out | LLM latency | result |
+|---|---|---|---|---|---|
+| S8 Planner | off (before) | 5 | 6532 / 632 (7164) | 17.5 s in the original fresh run (it included rate-limit waits) | cut e:s8:05, accepted, source planner |
+| S8 Planner | low | 5 | 6646 / 443 (7089) | 3.7 s (866+435+910+870+588 ms) | cut e:s8:05, accepted, source planner |
+| S2 Investigator | off (before) | 4 | 4275 / 510 (4785) | no fresh timing saved (cached replays only) | 2 jewels, 2 of 2 true paths |
+| S2 Investigator | low | 5 (+1 request that got a 429) | 5722 / 499 (6221) | 3.7 s plus a 7 s rate-limit wait (one call took 7883 ms) | 2 jewels, 2 of 2 true paths |
+
+**Decision rule** (enable only if tokens drop by 30% or more AND both runs end with the same accepted results): the results were the same, but the tokens did not drop: Planner in+out −1% (output −30%, input +2%: the input is the growing conversation and does not shrink), Investigator in+out **+30%** (one extra turn). **Not enabled**: the default stays empty. One sample each, so this is not a distribution, but nothing here supports turning it on. The code stays, off.
+
+**B live tests, one file at a time, with the demo's settings (effort not set), `-m live -s -rs`:**
+
+| file | pytest summary | real calls (`cached=False`) |
+|---|---|---|
+| tests/test_llm_gateway.py | 2 passed, 43 deselected | 1 (OpenRouter, the test is built for it) |
+| tests/test_agent_base.py | 2 passed, 23 deselected | 0 |
+| tests/test_investigator.py | 3 passed, 10 deselected (S2, S4, S7) | 0 |
+| tests/test_planner.py | 2 passed, 34 deselected (S8, S2) | 0 |
+| tests/test_reporter.py | 2 passed, 51 deselected | 0 |
+| tests/test_instructions_live.py | 2 passed | 0 (2 Groq requests failed with 400, see below) |
+| tests/test_worker.py | 2 passed, 14 deselected | 0 |
+
+These pass because every LLM answer is already in the cache (same messages, same keys): they re-verify the pipeline, the guards and the assertions against SAVED real model answers, not a fresh model behaviour. In `test_instructions_live.py` one test's Groq call is refused twice with 400 `tool_use_failed` (the model's own malformed tool call; failures are never cached), then the run replays on OpenRouter, whose answers are cached. So that scenario costs 2 failed Groq requests on every replay.
+
+**C demo cache.** Each demo run was replayed through the real API and worker (stack up, `DEMO_TOKEN` read inside the container): all five from the cache, 0 real calls, no failed-call warning and no OpenRouter line in the worker log. Table in the task reply: S2 DONE cut e:s2:05, e:s2:10 (12 of 12 steps cached, 5.0 s); S8 DONE e:s8:05 (11/11, 5.0 s); S8 + legacy-role instruction DONE e:s8:06 (11/11, 4.0 s); S5 NEEDS_HUMAN, no cut (6/6, 6.0 s); S3 DONE e:s3:02, source code (5/5, 4.0 s).
+
+**D:** `pytest -q -m "not live"` 661 passed, 15 deselected; `check_fast_mode` 8/8; `tests/test_readme.py` 11 passed.

@@ -151,7 +151,7 @@ def test_chat_uses_the_given_providers_url_key_model_and_caps(fake, monkeypatch)
     assert fake.built == [("groq", "http://g.test/v1", "g-key"), ("p", "http://p.test/v1", "key-p")]
     groq, other = fake.client.requests
     assert (groq["model"], groq["tool_choice"]) == ("g-model", FORCED) and (other["model"], other["tool_choice"]) == ("model-p", "auto")
-    assert gw.CAPS["groq"] == {"forced_tool_choice": True, "parallel": False, "json_mode": True}  # VERIFY_RESULTS P1.4
+    assert gw.CAPS["groq"] == {"forced_tool_choice": True, "parallel": False, "json_mode": True, "reasoning_effort": True}  # VERIFY_RESULTS P1.4, P9.7
 
 
 def test_providers_for_keeps_the_order_and_skips_the_incomplete(fake, monkeypatch, caplog):
@@ -332,3 +332,59 @@ def test_live_a_bad_key_is_llm_unavailable(falkordb, clean_cache, live_gateway, 
         gw.chat("planner", "openrouter", [{"role": "user", "content": "unit-test-bad-key"}])
     print(f"\nbad key -> {err.value}")
     assert "bad-key" not in str(err.value)
+
+
+# --- reasoning_effort (P9.7): Groq gpt-oss only, Investigator and Planner only ---
+
+@pytest.fixture
+def effort(fake, monkeypatch):
+    """provider 'p' that has the reasoning_effort capability, the setting on, models for every agent."""
+    monkeypatch.setitem(gw.CAPS, "p", {"forced_tool_choice": True, "parallel": False, "json_mode": True, "reasoning_effort": True})
+    monkeypatch.setattr(config, "LLM_REASONING_EFFORT", "low")
+    for agent in ("INVESTIGATOR", "REPORTER", "BASELINE"):
+        monkeypatch.setenv(f"MODEL_{agent}_P", "model-p")
+    fake.client = FakeClient(*[completion() for _ in range(8)])
+    return fake
+
+
+def test_reasoning_effort_is_sent_for_the_planner_and_the_investigator_only(effort):
+    for agent in ("planner", "investigator", "reporter", "baseline"):
+        gw.chat(agent, "p", MESSAGES)
+    sent = {agent: r.get("extra_body") for agent, r in zip(("planner", "investigator", "reporter", "baseline"), effort.client.requests)}
+    assert sent == {"planner": {"reasoning_effort": "low"}, "investigator": {"reasoning_effort": "low"}, "reporter": None, "baseline": None}
+
+
+def test_reasoning_effort_is_not_sent_when_the_setting_is_empty(effort, monkeypatch):
+    monkeypatch.setattr(config, "LLM_REASONING_EFFORT", "")
+    gw.chat("planner", "p", MESSAGES)
+    assert "extra_body" not in effort.client.requests[0]
+
+
+def test_reasoning_effort_is_not_sent_to_a_provider_without_the_capability(effort, monkeypatch):
+    monkeypatch.setitem(gw.CAPS, "p", {"forced_tool_choice": True, "parallel": False, "json_mode": True, "reasoning_effort": False})
+    gw.chat("planner", "p", MESSAGES)
+    monkeypatch.delitem(gw.CAPS, "p")  # an unknown provider: NO_CAPS
+    gw.chat("planner", "p", MESSAGES)
+    assert all("extra_body" not in r for r in effort.client.requests)
+    assert gw.CAPS["groq"]["reasoning_effort"] is True and gw.CAPS["openrouter"]["reasoning_effort"] is False
+
+
+def test_the_cache_key_is_unchanged_when_off_and_different_when_on():
+    import hashlib
+    import json
+    old = "llmcache:" + hashlib.sha256(json.dumps(["g", "m", MESSAGES, None, "auto", 0, None], sort_keys=True).encode()).hexdigest()
+    assert gw.cache_key("g", "m", MESSAGES, None, "auto", 0, None) == old == gw.cache_key("g", "m", MESSAGES, None, "auto", 0, None, None)
+    low, high = (gw.cache_key("g", "m", MESSAGES, None, "auto", 0, None, {"reasoning_effort": v}) for v in ("low", "high"))
+    assert len({old, low, high}) == 3
+
+
+def test_a_cached_answer_made_without_the_setting_is_not_used_when_it_is_on(effort, monkeypatch):
+    stored = {}
+    monkeypatch.setattr(config, "LLM_CACHE", True)
+    monkeypatch.setattr(gw, "_cache_get", lambda key: stored.get(key))
+    monkeypatch.setattr(gw, "_cache_set", lambda key, data: stored.update({key: data}))
+    monkeypatch.setattr(config, "LLM_REASONING_EFFORT", "")
+    gw.chat("planner", "p", MESSAGES)
+    monkeypatch.setattr(config, "LLM_REASONING_EFFORT", "low")
+    assert gw.chat("planner", "p", MESSAGES).cached is False  # a different key: the old answer is not served
+    assert gw.chat("planner", "p", MESSAGES).cached is True and len(stored) == 2 and len(effort.client.requests) == 2

@@ -853,6 +853,7 @@ The expected story: B-disable has the worst collateral, the greedy heuristics ar
 | `LLM_TIMEOUT_S` / `LLM_MAX_TOKENS` / `LLM_MAX_TOKENS_REPORTER` | `30` / `2000` / `2500` | Per call (`max_tokens`: the Reporter's own value, docs/06 §6) |
 | `LLM_MAX_WAIT_S` | `20` | The longest we wait for a 429's `retry-after` before the one retry |
 | `LLM_CACHE` | `on` | Record/replay cache in Redis (`llmcache:{hash}`) |
+| `LLM_REASONING_EFFORT` | `` (not sent) | P9.7. `low` / `medium` / `high`, sent as `extra_body={"reasoning_effort": ...}` to a provider with `CAPS[...]["reasoning_effort"]` (Groq only), for the Investigator and the Planner only, never the Reporter. Part of the cache key only when sent. Measured, NOT enabled by default (docs/VERIFY_RESULTS.md P9.7) |
 | `LLM_CACHE_TTL_S` | `604800` (7 days) | Cache entry lifetime |
 | `MAX_HOPS` | `6` | Display bound for path listing |
 | `TOP_K_PATHS` | `20` | Paths returned |
